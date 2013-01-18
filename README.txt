@@ -9,4 +9,11 @@ This will create a directory "install" inside the opencv root folder. You need t
 
 Then you need to edit the CMakeLists.txt file within the FRCVision root. You need to change the "SET(OpenCV_DIR, '...')" to point to your OpenCV's install path. Note that you cannot delete OpenCV, or else you won't be able to compile against it.
 
-The other library is libcurl, which is slightly easier. To do this, Simply download the Win32 zip file from their website, and don't choose the one labelled "binary".
+The other library is libcurl, which is slightly easier. To do this, Simply download the Win32 zip file from their website, and don't choose the one labelled "binary". Download it, extract it, and copy the ".a" files within the "lib" directory to your MinGW "lib" library. Then copy the "curl" directory inside the "include" directory to your MinGW "include" directory (Usually "C:\MinGW\include").
+
+Compiling:
+==========
+First, cd into the FRCVision source tree.
+$ cmake -G "MinGW Makefiles" . # Generate the Makefile. Only needed once.
+$ mingw32-make # Compile!
+$ bin\main.exe # Run!

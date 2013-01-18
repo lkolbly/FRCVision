@@ -7,11 +7,17 @@
 
 int main ( int argc, char **argv )
 {
+	pthread_mutex_t new_Image_Mutex;
+	pthread_mutex_init(&new_Image_Mutex, NULL);
+	threadData_t td;
+	td.mutex = new_Image_Mutex;
+	td.var = 0;
+
 	pthread_t networking_thread, processing_thread;
-	int rc = pthread_create(&networking_thread, NULL, networkMain, NULL);
+	int rc = pthread_create(&networking_thread, NULL, networkMain, &td);
 	assert(0==rc);
 	
-	rc = pthread_create(&processing_thread, NULL, processingMain, NULL);
+	rc = pthread_create(&processing_thread, NULL, processingMain, &td);
 	assert(0==rc);
 	
 	rc = pthread_join(networking_thread, NULL);

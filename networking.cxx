@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <windows.h>
 #include "networking.hxx"
+#include "semaphores.hxx"
 
 size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 {

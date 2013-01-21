@@ -2,26 +2,49 @@
 #include <highgui.h>
 #include "networking.hxx"
 #include "processing.hxx"
+#include "server.hxx"
+#include "semaphores.hxx"
 #include <pthread.h>
 #include <stdio.h>
 
 int main ( int argc, char **argv )
 {
+    WORD wVersionRequested;
+    WSADATA wsaData;
+    int err;
+
+/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
+    wVersionRequested = MAKEWORD(2, 2);
+
+    err = WSAStartup(wVersionRequested, &wsaData);
+    if (err != 0) {
+        /* Tell the user that we could not find a usable */
+        /* Winsock DLL.                                  */
+        printf("WSAStartup failed with error: %d\n", err);
+        return 1;
+    }
+
+
 	pthread_mutex_t new_Image_Mutex;
 	pthread_mutex_init(&new_Image_Mutex, NULL);
 	threadData_t td;
 	td.mutex = new_Image_Mutex;
 	td.var = 0;
 
-	pthread_t networking_thread, processing_thread;
-	int rc = pthread_create(&networking_thread, NULL, networkMain, &td);
+	pthread_t networking_thread, processing_thread, server_thread;
+	int rc;
+	//rc = pthread_create(&networking_thread, NULL, networkMain, &td);
+	//assert(0==rc);
+	
+	//rc = pthread_create(&processing_thread, NULL, processingMain, &td);
+	//assert(0==rc);
+	
+	rc = pthread_create(&server_thread, NULL, serverMain, &td);
 	assert(0==rc);
 	
-	rc = pthread_create(&processing_thread, NULL, processingMain, &td);
-	assert(0==rc);
-	
-	rc = pthread_join(networking_thread, NULL);
-	rc = pthread_join(processing_thread, NULL);
+	//rc = pthread_join(networking_thread, NULL);
+	//rc = pthread_join(processing_thread, NULL);
+	rc = pthread_join(server_thread, NULL);
 	return 0;
 
 	networkMain(NULL);

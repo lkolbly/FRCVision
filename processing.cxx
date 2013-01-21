@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include <windows.h>
 #include "processing.hxx"
-#include "networking.hxx"
+#include "semaphores.hxx"
 
 void *processingMain(void *arg)
 {

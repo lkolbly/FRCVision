@@ -30,20 +30,22 @@ int main ( int argc, char **argv )
 	threadData_t td;
 	td.mutex = new_Image_Mutex;
 	td.var = 0;
+	pthread_mutex_init(&td.image_file_lock, NULL);
+	pthread_mutex_init(&td.processed_data_lock, NULL);
 
 	pthread_t networking_thread, processing_thread, server_thread;
 	int rc;
-	//rc = pthread_create(&networking_thread, NULL, networkMain, &td);
-	//assert(0==rc);
+	rc = pthread_create(&networking_thread, NULL, networkMain, &td);
+	assert(0==rc);
 	
-	//rc = pthread_create(&processing_thread, NULL, processingMain, &td);
-	//assert(0==rc);
+	rc = pthread_create(&processing_thread, NULL, processingMain, &td);
+	assert(0==rc);
 	
 	rc = pthread_create(&server_thread, NULL, serverMain, &td);
 	assert(0==rc);
 	
-	//rc = pthread_join(networking_thread, NULL);
-	//rc = pthread_join(processing_thread, NULL);
+	rc = pthread_join(networking_thread, NULL);
+	rc = pthread_join(processing_thread, NULL);
 	rc = pthread_join(server_thread, NULL);
 	return 0;
 

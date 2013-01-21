@@ -13,6 +13,20 @@ size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 	return size*nmemb;
 }
 
+void networkingDownloadImage(CURL *c)
+{
+	printf("Downloading file.\n");
+	FILE *f = fopen("tmp.jpg", "wb");
+	if (!f) {
+		fprintf(stderr, "We couldn't open out.jpg...\n");
+		return;
+	}
+	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
+	int success = curl_easy_perform(c);
+	printf("Success was %s\n", curl_easy_strerror((CURLcode)success));
+	fclose(f);
+}
+
 void *networkMain(void *arg)
 {
 	threadData_t *td = (threadData_t*)arg;
@@ -25,24 +39,15 @@ void *networkMain(void *arg)
 	curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
 
+	// TODO: Some sort of flow rate.
 	while (1) {
-		pthread_mutex_lock(&td->mutex);
-		//printf("Networking: %i/%i\n", last_downloaded, td->var);
-		if (last_downloaded < td->var) {
-			printf("Downloading file.\n");
-			FILE *f = fopen("out.jpg", "wb");
-			if (!f) {
-				fprintf(stderr, "We couldn't open out.jpg...\n");
-				return NULL;
-			}
-			curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
-			int success = curl_easy_perform(c);
-			printf("Success was %s\n", curl_easy_strerror((CURLcode)success));
-			fclose(f);
-			last_downloaded = ++td->var;
-		}
-		pthread_mutex_unlock(&td->mutex);
-		//Sleep(500);
+		networkingDownloadImage(c);
+
+		// Move 'tmp.jpg' to the protected 'out.jpg'
+		pthread_mutex_lock(&td->image_file_lock);
+		MoveFile("tmp.jpg", "out.jpg");
+		td->has_processed_image = 0;
+		pthread_mutex_unlock(&td->image_file_lock);
 	}
 
 	curl_easy_cleanup(c);

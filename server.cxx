@@ -12,11 +12,19 @@ class Client
 {
 private:
 	int m_fd;
+	int m_conn_stage; // 0=Needs handshake, 1=has handshake
+
+	unsigned char *m_databuf;
+	int m_databuf_len;
+	
+	int process_bytes(const unsigned char *buf, int nbytes);
+	int send_raw_packet(unsigned int packet_type, const unsigned char *buf, int buflen);
 
 public:
 	Client();
 	Client(int fd);
 	
+	int data_receivable(void);
 	int update(void);
 	int getFD(void);
 };
@@ -29,12 +37,76 @@ Client::Client()
 Client::Client(int fd)
 {
 	m_fd = fd;
+	m_conn_stage = 0;
+	m_databuf_len = 0;
+	m_databuf = (unsigned char *)malloc(1);
 }
 
+int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, int buflen)
+{
+	unsigned int l = buflen;
+	send(m_fd, (const char *)&l, 4, 0);
+	send(m_fd, (const char *)&packet_type, 4, 0);
+	send(m_fd, (const char *)buf, buflen, 0);
+	return 8+buflen;
+}
+
+// Returns the # of bytes processed
+int Client::process_bytes(const unsigned char *buf, int nbytes)
+{
+	if (nbytes < 8) {
+		return 0;
+	}
+	
+	unsigned int len;
+	memcpy(&len, buf, 4);
+
+	unsigned int packet_type;
+	memcpy(&packet_type, buf+4, 4);
+	
+	if (nbytes < len+8) {
+		return 0;
+	}
+
+	int camera_ip;
+	unsigned char outgoing[256];
+	switch (packet_type) {
+	case 0x00000001:
+		// TODO: Actually process something here...
+		outgoing[0] = 0x00;
+		outgoing[1] = 0x00;
+		send_raw_packet(0x80000001, outgoing, 2);
+		return 12;
+	case 0x01000003:
+		// Get the camera IP address...
+		memcpy(&camera_ip, buf+8, 4);
+
+		// Set the outgoing packet
+		memset(outgoing, 0, 6);
+		send_raw_packet(0x81000003, outgoing, 6);
+		return 12;
+	case 0x02000001:
+		// Oh boy...
+		return 11;
+	default:
+		printf("Unknown packet!\n");
+		return len+8; // Skip unknown packets...
+	}
+
+	return 0;
+}
+
+// Update is called when we're in fastloop mode (i.e. waiting for a mutex, or something else not selectable)
 int Client::update(void)
 {
+	return 0;
+}
+
+// data_receivable is called when we know that data can be read.
+int Client::data_receivable(void)
+{
 	if (m_fd == -1) {
-		return -1;
+		return 1;
 	}
 	printf("I have a m_fd! It's %i!\n", m_fd);
 	char buf[1024];
@@ -44,8 +116,14 @@ int Client::update(void)
 		return 1;
 	} else {
 		printf("They sent us %i bytes!\n", nbytes);
+		m_databuf = (unsigned char *)realloc((void*)m_databuf, m_databuf_len+nbytes);
+		memcpy(m_databuf+m_databuf_len, buf, nbytes);
+		m_databuf_len += nbytes;
+		int processed = process_bytes(m_databuf, m_databuf_len);
+		memmove(m_databuf, m_databuf+processed, m_databuf_len-processed);
+		m_databuf_len -= processed;
 	}
-	return 0;
+	return 2; // 0 is "OK". 2 is "We're waiting on an external event."
 }
 
 int Client::getFD(void)
@@ -84,6 +162,7 @@ void *serverMain(void *arg)
 	bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     listen(sockfd,5);
 	
+	int enable_fastloop = 0;
 	while (1) {
 		fd_set rfs;
 		FD_ZERO(&rfs);
@@ -92,7 +171,7 @@ void *serverMain(void *arg)
 		for (std::vector<Client*>::iterator it=clients.begin(); it!=clients.end(); ++it) {
 			FD_SET((*it)->getFD(),&rfs);
 		}
-		
+
 		printf("Selecting...\n");
 		int rval = select(1+clients.size(), &rfs, NULL, NULL, NULL);
 		printf("%i\n", rval);
@@ -114,87 +193,25 @@ void *serverMain(void *arg)
 			if (FD_ISSET((*it)->getFD(),&rfs)) {
 				// Looks like we found someone!
 				printf("Client can talk.\n");
-				if ((*it)->update()) {
+				int retval = (*it)->data_receivable();
+				if (retval == 1) {
 					clients.erase(it);
 					break;
+				} else if (retval == 2) {
+					enable_fastloop = 1;
+				}
+			}
+			if (enable_fastloop) {
+				int retval = (*it)->update();
+				if (retval == 1) {
+					clients.erase(it);
+					break;
+				} else if (retval == 2) {
+					enable_fastloop = 1;
 				}
 			}
 		}
 	}
 
-#if 0
-
-	// Socket code courtesy of linuxhowtos.org, since I didn't feel like pasting together the code ;)
-	/*
-    int sockfd, newsockfd, portno;
-    socklen_t clilen;
-    char buffer[256];
-    struct sockaddr_in serv_addr, cli_addr;
-    int n;
-	*/
-
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) 
-       error("ERROR opening socket");
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-    portno = 4180;
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(portno);
-    if (bind(sockfd, (struct sockaddr *) &serv_addr,
-             sizeof(serv_addr)) < 0) 
-             error("ERROR on binding");
-    listen(sockfd,5);
-
-
-	while (1) {
-		/*
-		int e = epoll_create1(0);
-		struct epoll_event ev, events[5];
-		ev.events = EPOLLIN;
-		ev.data.fd = sockfd;
-		epoll_ctl(e, EPOLL_CTL_ADD, sockfd, &ev); // WARNING: Could equal -1! If so, return error message with perror.
-
-		// Add the clients...
-		for (std::set<int,Client>::iterator it=clients.begin(); it!=clients.end(); ++it) {
-			ev.data.fd = (*it).getFD();
-			epoll_ctl(e, EPOLL_CTL_ADD, (*it).getFD(), &ev);
-		}
-
-		// Now we wait, and respond...
-		int nfds = epoll_wait(e, events, 5, -1);
-		for (int i=0; i<nfds; i++) {
-			if (events[i].data.fd == sockfd) {
-				// Accept a new connection...
-				int new_fd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
-				Client c = new Client(new_fd);
-				clients[new_fd] = c;
-			} else {
-				// It's a client!
-				clients[events[i].data.fd].update();
-			}
-		}
-		*/
-
-
-		/*
-		clilen = sizeof(cli_addr);
-		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-		if (newsockfd < 0) 
-			error("ERROR on accept");
-		bzero(buffer,256);
-		n = read(newsockfd,buffer,255);
-		if (n < 0) error("ERROR reading from socket");
-		printf("Here is the message: %s\n",buffer);
-		n = write(newsockfd,"I got your message",18);
-		if (n < 0) error("ERROR writing to socket");
-		*/
-	}
-
-
-    close(newsockfd);
-    close(sockfd);
-#endif
     return 0;
 }

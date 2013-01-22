@@ -104,7 +104,7 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		return 12;
 	case 0x02000001:
 		// Oh boy...
-		
+
 #if 0 // This code will send stuff....
 		double sum=0;
 for(int i = 0; i < M.rows; i++)

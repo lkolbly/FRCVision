@@ -18,13 +18,14 @@ void networkingDownloadImage(CURL *c)
 	printf("Downloading file.\n");
 	FILE *f = fopen("tmp.jpg", "wb");
 	if (!f) {
-		fprintf(stderr, "We couldn't open out.jpg...\n");
+		fprintf(stderr, "We couldn't open tmp.jpg...\n");
 		return;
 	}
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
 	int success = curl_easy_perform(c);
 	printf("Success was %s\n", curl_easy_strerror((CURLcode)success));
 	fclose(f);
+	//Sleep(1000);
 }
 
 void *networkMain(void *arg)
@@ -36,12 +37,14 @@ void *networkMain(void *arg)
 	int last_downloaded = -1;
 	
 	CURL *c = curl_easy_init();
-	curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
+	//curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
+	curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
+	curl_easy_setopt(c, CURLOPT_USERPWD, "FRC:FRC");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
 
 	// Set our initial configuration
 	pthread_mutex_lock(&td->image_file_lock);
-	td->collection_cfg.image_filename = strdup("out.jpg");
+	td->collection_cfg.image_filename = strdup("new.jpg");
 	pthread_mutex_unlock(&td->image_file_lock);
 
 	// TODO: Some sort of flow rate.
@@ -53,6 +56,7 @@ void *networkMain(void *arg)
 		pthread_mutex_lock(&td->image_file_lock);
 		MoveFile("tmp.jpg", td->collection_cfg.image_filename);
 		td->has_processed_image = 0;
+		td->collection_cfg.uid = rand();
 		pthread_mutex_unlock(&td->image_file_lock);
 	}
 

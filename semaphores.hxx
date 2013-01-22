@@ -16,6 +16,7 @@ public:
 typedef struct imageryCollectionConfig_t {
 	// Probably camera IP addresses or something here...
 	char *image_filename; // The filename of the local file cache
+	int uid;
 } imageryCollection_t;
 
 typedef struct threadData_t {

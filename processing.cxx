@@ -19,17 +19,18 @@ void *processingMain(void *arg)
 	// TODO: Multiple images.
 	while (1) {
 		pthread_mutex_lock(&td->image_file_lock);
-		if (1) { // TODO: Compare some sort of UID between collection_cfg and processing_result
-			MoveFile("out.jpg", "queue.jpg"); // Copy out the file
+		if (td->processing_result.uid != td->collection_cfg.uid) {
+			//printf("%i\n", td->processing_result.uid);
+			MoveFile("new.jpg", "queue.jpg"); // Copy out the file
 			//td->has_processed_image = 1;
 			pthread_mutex_unlock(&td->image_file_lock);
 
 			printf("Processing file.\n");
 			processedImagery_t processed_imagery = processFile("queue.jpg");
-			//Sleep(1000);
+			//Sleep(2000);
 
 			pthread_mutex_lock(&td->processed_data_lock);
-			processed_imagery.uid = td->processing_result.uid + 1;
+			processed_imagery.uid = td->collection_cfg.uid;
 			memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
 			pthread_mutex_unlock(&td->processed_data_lock);
 		} else {

@@ -39,13 +39,19 @@ void *networkMain(void *arg)
 	curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
 
+	// Set our initial configuration
+	pthread_mutex_lock(&td->image_file_lock);
+	td->collection_cfg.image_filename = strdup("out.jpg");
+	pthread_mutex_unlock(&td->image_file_lock);
+
 	// TODO: Some sort of flow rate.
+	// TODO: Multiple cameras.
 	while (1) {
 		networkingDownloadImage(c);
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		MoveFile("tmp.jpg", "out.jpg");
+		MoveFile("tmp.jpg", td->collection_cfg.image_filename);
 		td->has_processed_image = 0;
 		pthread_mutex_unlock(&td->image_file_lock);
 	}

@@ -1,25 +1,37 @@
-#include <cv.h>
 #include <stdio.h>
 #include <pthread.h>
 #include <windows.h>
 #include "processing.hxx"
 #include "semaphores.hxx"
 
+processedImagery_t processFile(const char *in_fname)
+{
+	processedImagery_t v;
+	v.img_data = cv::imread(in_fname);
+	return v;
+}
+
 void *processingMain(void *arg)
 {
 	threadData_t *td = (threadData_t*)arg;
 	printf("Starting processing thread.\n");
 
-	// Wait until the image file has been updated.
+	// TODO: Multiple images.
 	while (1) {
 		pthread_mutex_lock(&td->image_file_lock);
-		if (!td->has_processed_image) {
+		if (1) { // TODO: Compare some sort of UID between collection_cfg and processing_result
 			MoveFile("out.jpg", "queue.jpg"); // Copy out the file
-			td->has_processed_image = 1;
+			//td->has_processed_image = 1;
 			pthread_mutex_unlock(&td->image_file_lock);
 
 			printf("Processing file.\n");
-			Sleep(1000);
+			processedImagery_t processed_imagery = processFile("queue.jpg");
+			//Sleep(1000);
+
+			pthread_mutex_lock(&td->processed_data_lock);
+			processed_imagery.uid = td->processing_result.uid + 1;
+			memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
+			pthread_mutex_unlock(&td->processed_data_lock);
 		} else {
 			pthread_mutex_unlock(&td->image_file_lock);
 		}

@@ -6,13 +6,29 @@
 #include <winsock.h>
 #include <Winsock2.h>
 #include <vector>
+#include <opencv2/opencv.hpp>
 #include "server.hxx"
+#include "semaphores.hxx"
+
+#if 0
+// compute sum of positive matrix elements
+// (assuming that M is double-precision matrix)
+double sum=0;
+for(int i = 0; i < M.rows; i++)
+{
+    const double* Mi = M.ptr<double>(i);
+    for(int j = 0; j < M.cols; j++)
+        sum += std::max(Mi[j], 0.);
+}
+#endif
 
 class Client
 {
 private:
+	threadData_t *m_td;
 	int m_fd;
 	int m_conn_stage; // 0=Needs handshake, 1=has handshake
+	int m_waiting_for_image;
 
 	unsigned char *m_databuf;
 	int m_databuf_len;
@@ -22,8 +38,8 @@ private:
 
 public:
 	Client();
-	Client(int fd);
-	
+	Client(int fd, threadData_t *td);
+
 	int data_receivable(void);
 	int update(void);
 	int getFD(void);
@@ -34,8 +50,9 @@ Client::Client()
 	m_fd = -1;
 }
 
-Client::Client(int fd)
+Client::Client(int fd, threadData_t *td)
 {
+	m_td = td;
 	m_fd = fd;
 	m_conn_stage = 0;
 	m_databuf_len = 0;
@@ -87,6 +104,18 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		return 12;
 	case 0x02000001:
 		// Oh boy...
+		
+#if 0 // This code will send stuff....
+		double sum=0;
+for(int i = 0; i < M.rows; i++)
+{
+    const double* Mi = M.ptr<double>(i);
+    for(int j = 0; j < M.cols; j++)
+        sum += std::max(Mi[j], 0.);
+}
+#endif
+		m_waiting_for_image = 1;
+
 		return 11;
 	default:
 		printf("Unknown packet!\n");
@@ -99,6 +128,36 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 // Update is called when we're in fastloop mode (i.e. waiting for a mutex, or something else not selectable)
 int Client::update(void)
 {
+	if (m_waiting_for_image) {
+		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
+			
+			cv::Mat M = m_td->processing_result.img_data;
+			unsigned char *outgoing = (unsigned char*)malloc(14+M.rows*M.cols);
+			outgoing[0] = 0; // Camera ID
+			long timestamp = 0;
+			memcpy(outgoing+1, &timestamp, 8);
+			short w=M.cols, h=M.rows;
+			memcpy(outgoing+9, &w, 2);
+			memcpy(outgoing+11, &h, 2);
+			unsigned char type = 0x00;
+			memcpy(outgoing+13, &type, 1);
+			
+			for(int i = 0; i < M.rows; i++)
+			{
+				const double* Mi = M.ptr<double>(i);
+				for(int j = 0; j < M.cols; j++) {
+					//sum += std::max(Mi[j], 0.);
+					char pixel = Mi[j];
+					outgoing[i*M.cols+j+14] = pixel;
+				}
+			}
+			
+			send_raw_packet(0x82000001, outgoing, M.rows*M.cols+14);
+			
+			pthread_mutex_unlock(&m_td->processed_data_lock);
+			m_waiting_for_image = 0;
+		}
+	}
 	return 0;
 }
 
@@ -123,7 +182,10 @@ int Client::data_receivable(void)
 		memmove(m_databuf, m_databuf+processed, m_databuf_len-processed);
 		m_databuf_len -= processed;
 	}
-	return 2; // 0 is "OK". 2 is "We're waiting on an external event."
+	if (m_waiting_for_image) {
+		return 2;
+	}
+	return 0; // 0 is "OK". 2 is "We're waiting on an external event."
 }
 
 int Client::getFD(void)
@@ -139,6 +201,7 @@ void serverError(const char *msg)
 
 void *serverMain(void *arg)
 {
+	threadData_t *td = (threadData_t*)arg;
 	std::vector<Client*> clients;
 
     int sockfd, newsockfd, portno;
@@ -185,7 +248,7 @@ void *serverMain(void *arg)
 			// There's someone new wanting a connection!
 			printf("There's a new connection!\n");
 			int new_fd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
-			Client *c = new Client(new_fd);
+			Client *c = new Client(new_fd, td);
 			clients.push_back(c);
 		}
 

@@ -9,6 +9,7 @@
 #include <opencv2/opencv.hpp>
 #include "server.hxx"
 #include "semaphores.hxx"
+#include "processing.hxx"
 
 #if 0
 // compute sum of positive matrix elements
@@ -131,6 +132,7 @@ int Client::update(void)
 	if (m_waiting_for_image) {
 		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
 			
+#if 0
 			cv::Mat M = m_td->processing_result.img_data;
 			unsigned char *outgoing = (unsigned char*)malloc(14+M.rows*M.cols);
 			outgoing[0] = 0; // Camera ID
@@ -151,8 +153,17 @@ int Client::update(void)
 					outgoing[i*M.cols+j+14] = pixel;
 				}
 			}
+#endif
+
+			unsigned int datalen;
+			unsigned char *contour_data = m_td->processing_result.render_contours(datalen);
 			
-			send_raw_packet(0x82000001, outgoing, M.rows*M.cols+14);
+			unsigned char *outgoing = (unsigned char*)malloc(10+datalen);
+			short subframe_id = 0x0001;
+			memcpy(outgoing, &subframe_id, 2);
+			memcpy(outgoing+2, contour_data, datalen);
+			
+			send_raw_packet(0x82000001, outgoing, datalen+2);
 			
 			pthread_mutex_unlock(&m_td->processed_data_lock);
 			m_waiting_for_image = 0;

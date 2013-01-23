@@ -37,8 +37,8 @@ void *networkMain(void *arg)
 	int last_downloaded = -1;
 	
 	CURL *c = curl_easy_init();
-	//curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
-	curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
+	curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
+	//curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
 	curl_easy_setopt(c, CURLOPT_USERPWD, "FRC:FRC");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
 

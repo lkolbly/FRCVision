@@ -3,15 +3,7 @@
 
 #include <pthread.h>
 #include <opencv2/opencv.hpp>
-
-class processedImagery_t
-{
-public:
-	// Some sort of image? Maybe?
-	char *filename; // Filename of the final image
-	int uid;
-	cv::Mat img_data;
-};
+#include "processing.hxx"
 
 typedef struct imageryCollectionConfig_t {
 	// Probably camera IP addresses or something here...

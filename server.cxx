@@ -29,7 +29,7 @@ private:
 	threadData_t *m_td;
 	int m_fd;
 	int m_conn_stage; // 0=Needs handshake, 1=has handshake
-	int m_waiting_for_image;
+	int m_stateless_pending; // Are we pending an update for a stateless client?
 
 	unsigned char *m_databuf;
 	int m_databuf_len;
@@ -66,6 +66,7 @@ int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, 
 	send(m_fd, (const char *)&l, 4, 0);
 	send(m_fd, (const char *)&packet_type, 4, 0);
 	send(m_fd, (const char *)buf, buflen, 0);
+	printf("Sent %i bytes.\n", 8+buflen);
 	return 8+buflen;
 }
 
@@ -115,7 +116,7 @@ for(int i = 0; i < M.rows; i++)
         sum += std::max(Mi[j], 0.);
 }
 #endif
-		m_waiting_for_image = 1;
+		m_stateless_pending = 1;
 
 		return 11;
 	default:
@@ -129,7 +130,7 @@ for(int i = 0; i < M.rows; i++)
 // Update is called when we're in fastloop mode (i.e. waiting for a mutex, or something else not selectable)
 int Client::update(void)
 {
-	if (m_waiting_for_image) {
+	if (m_stateless_pending) {
 		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
 			
 #if 0
@@ -163,10 +164,10 @@ int Client::update(void)
 			memcpy(outgoing, &subframe_id, 2);
 			memcpy(outgoing+2, contour_data, datalen);
 			
-			send_raw_packet(0x82000001, outgoing, datalen+2);
+			send_raw_packet(0x82000002, outgoing, datalen+2);
 			
 			pthread_mutex_unlock(&m_td->processed_data_lock);
-			m_waiting_for_image = 0;
+			m_stateless_pending = 0;
 		}
 	}
 	return 0;
@@ -193,7 +194,7 @@ int Client::data_receivable(void)
 		memmove(m_databuf, m_databuf+processed, m_databuf_len-processed);
 		m_databuf_len -= processed;
 	}
-	if (m_waiting_for_image) {
+	if (m_stateless_pending) {
 		return 2;
 	}
 	return 0; // 0 is "OK". 2 is "We're waiting on an external event."

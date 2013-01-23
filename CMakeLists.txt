@@ -1,5 +1,5 @@
 PROJECT( helloworld_proj )
-SET(libCURL_DIR "-lcurldll -lwsock32 -lws2_32")
+SET(libCURL_DIR "-lcurldll -lwsock32 -lws2_32 -lexpat")
 SET(OpenCV_DIR "C:\\Documents and Settings\\Lane Kolbly\\My Documents\\Downloads\\opencv\\install")
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 FIND_PACKAGE( Threads REQUIRED )

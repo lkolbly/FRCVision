@@ -5,6 +5,116 @@
 #include "semaphores.hxx"
 #include <pthread.h>
 #include <stdio.h>
+#include <expat.h>
+
+typedef struct parsingState_t {
+	int is_in_tracking;
+	
+	int is_in_object;
+	trackingObject_t cur_obj;
+	
+	int is_parsing_text;
+	char text[1024];
+	
+	threadData_t *td;
+} parsingState_t;
+
+const char *getAttribute(const char *key, const char **attrs)
+{
+	for (int i=0; attrs[i]!=NULL; i+=2) {
+		if (strcmp(attrs[i], key) == 0) {
+			return attrs[i+1];
+		}
+	}
+	return NULL;
+}
+
+static void XMLCALL
+cfgStartElem(void *data, const char *el, const char **attr)
+{
+	parsingState_t *o = (parsingState_t*)data;
+	if (strcmp(el, "tracking") == 0 && !o->is_in_tracking) {
+		o->is_in_tracking = 1;
+	} else if (strcmp(el, "object") == 0) {
+		//o->cur_obj.type = strdup(getAttribute("type", attr));
+		const char *t = getAttribute("type", attr);
+		if (strcmp(t, "rectangle") == 0) {
+			o->cur_obj.type = OBJ_HOLLOW_RECT;
+		}
+		o->is_in_object = 1;
+	} else if (strcmp(el, "width") == 0 && o->is_in_object) {
+		o->is_parsing_text = 1;
+	} else if (strcmp(el, "camera") == 0) {
+		o->td->collection_cfg.camera_hostname = strdup(getAttribute("ip", attr));
+	}
+	return;
+}
+
+static void XMLCALL
+cfgTextElem(void *data, const char *s, int len)
+{
+	parsingState_t *o = (parsingState_t*)data;
+	if (o->is_parsing_text) {
+		memcpy(o->text+strlen(o->text), s, len);
+	}
+}
+
+static void XMLCALL
+cfgEndElem(void *data, const char *el, const char **attr)
+{
+	parsingState_t *o = (parsingState_t*)data;
+	if (strcmp(el, "tracking") == 0 && o->is_in_tracking) {
+		o->is_in_tracking = 0;
+	} else if (strcmp(el, "object") == 0) {
+		o->is_in_object = 0;
+	} else if (strcmp(el, "width") == 0) {
+		if (o->is_in_object) {
+			o->cur_obj.width = atof(o->text);
+		}
+	} else if (strcmp(el, "height") == 0) {
+		if (o->is_in_object) {
+			o->cur_obj.height = atof(o->text);
+		}
+	}
+	
+	if (o->is_parsing_text) {
+		o->is_parsing_text = 0;
+		memset(o->text, 0, 1024);
+	}
+	return;
+}
+
+// This is a bit of a hackish way to do it, since WE DON'T HAVE CONFIG FILES (Michael...)
+void loadConfigFiles(threadData_t *td)
+{
+	FILE *f = fopen("camera.xml", "rb");
+	if (!f) {
+		fprintf(stderr, "Couldn't open 'camera.xml'\n");
+		return;
+	}
+
+	XML_Parser p = XML_ParserCreate(NULL);
+	XML_SetElementHandler(p, cfgStartElem, (XML_EndElementHandler)cfgEndElem);
+	XML_SetCharacterDataHandler(p, cfgTextElem);
+	parsingState_t state;
+	state.td = td;
+	XML_SetUserData(p, &state);
+	for (;;) {
+		char buf[1024];
+		int done = 0;
+		int len = (int)fread(buf, 1, 1024, f);
+		if (feof(f)) {
+			done = 1;
+		}
+		
+		XML_Parse(p, buf, 1024, done);
+		if (done) {
+			break;
+		}
+	}
+	XML_ParserFree(p);
+	fclose(f);
+}
 
 int main ( int argc, char **argv )
 {
@@ -29,6 +139,7 @@ int main ( int argc, char **argv )
 	threadData_t td;
 	td.mutex = new_Image_Mutex;
 	td.var = 0;
+	loadConfigFiles(&td);
 	pthread_mutex_init(&td.image_file_lock, NULL);
 	pthread_mutex_init(&td.processed_data_lock, NULL);
 

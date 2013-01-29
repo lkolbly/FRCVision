@@ -18,6 +18,14 @@ typedef struct pContours_t {
 	std::vector<std::vector<cv::Point> > contour_data;
 } pContours_t;
 
+class Target
+{
+public:
+	double centroid_distance;
+	double azimuth, elevation;
+	int px_left, px_top, px_right, px_bottom;
+};
+
 class processedImagery_t
 {
 public:
@@ -27,6 +35,8 @@ public:
 	cv::Mat img_data;
 	
 	vector<vector<cv::Point> > contours;
+	
+	vector<Target> targets;
 	
 	unsigned char *render_contours(unsigned int &len);
 	

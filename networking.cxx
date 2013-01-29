@@ -38,7 +38,10 @@ void *networkMain(void *arg)
 	
 	CURL *c = curl_easy_init();
 	//curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
-	curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
+	//curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
+	char camera_url[1024];
+	snprintf(camera_url, 1024, "http://%s/axis-cgi/jpg/image.cgi", td->collection_cfg.camera_hostname);
+	curl_easy_setopt(c, CURLOPT_URL, camera_url);
 	curl_easy_setopt(c, CURLOPT_USERPWD, "FRC:FRC");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
 

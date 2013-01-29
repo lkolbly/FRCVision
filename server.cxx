@@ -29,7 +29,8 @@ private:
 	threadData_t *m_td;
 	int m_fd;
 	int m_conn_stage; // 0=Needs handshake, 1=has handshake
-	int m_stateless_pending; // Are we pending an update for a stateless client?
+	int m_update_pending; // Are we pending an update for a stateless client?
+	unsigned char m_data_requested;
 
 	unsigned char *m_databuf;
 	int m_databuf_len;
@@ -67,15 +68,14 @@ int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, 
 	   unsigned int i;
 	   char j[4];
 	} foo;
-	foo.i = l;
-	for (int i=0; i<4; i++) {
-		send(m_fd, (const char *)&foo.j[i], 1, 0);
-	}
-	foo.i = packet_type;
-	for (int i=0; i<4; i++) {
-		send(m_fd, (const char *)&foo.j[i], 1, 0);
-	}
+
+	l = htonl(l);
+	send(m_fd, (const char *)&l, 4, 0);
+	packet_type = htonl(packet_type); // Swap the endianness
+	send(m_fd, (const char *)&packet_type, 4, 0);
 	send(m_fd, (const char *)buf, buflen, 0);
+	
+	// Print some debug information
 	printf("Sent %i bytes.\n", 8+buflen);
 	foo.i = l;
 	for (int i=0; i<4; i++) {
@@ -126,19 +126,9 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		memset(outgoing, 0, 6);
 		send_raw_packet(0x81000003, outgoing, 6);
 		return 12;
-	case 0x02000001:
-		// Oh boy...
-
-#if 0 // This code will send stuff....
-		double sum=0;
-for(int i = 0; i < M.rows; i++)
-{
-    const double* Mi = M.ptr<double>(i);
-    for(int j = 0; j < M.cols; j++)
-        sum += std::max(Mi[j], 0.);
-}
-#endif
-		m_stateless_pending = 1;
+	case 0x02000001: // They're requesting an update
+		m_update_pending = 1;
+		m_data_requested = buf[0];
 
 		return 11;
 	default:
@@ -152,10 +142,10 @@ for(int i = 0; i < M.rows; i++)
 // Update is called when we're in fastloop mode (i.e. waiting for a mutex, or something else not selectable)
 int Client::update(void)
 {
-	if (m_stateless_pending || 1) {
+	if (m_update_pending) {
 		//printf("Stateless is pending.\n");
 		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
-			
+
 #if 0
 			cv::Mat M = m_td->processing_result.img_data;
 			unsigned char *outgoing = (unsigned char*)malloc(14+M.rows*M.cols);
@@ -180,20 +170,47 @@ int Client::update(void)
 #endif
 
 			unsigned int datalen = 0;
+			unsigned char *outgoing = (unsigned char *)malloc(1024);
 			unsigned char *contour_data;// = m_td->processing_result.render_contours(datalen);
 			
-			unsigned char *outgoing = (unsigned char*)malloc(4);
-			short subframe_id = 0x0002;
-			memcpy(outgoing, &subframe_id, 2);
-			unsigned short ntargets = 0;
-			memcpy(outgoing+2, &ntargets, 2);
-			//memcpy(outgoing, &subframe_id, 2);
-			//memcpy(outgoing+2, contour_data, datalen);
-			printf("Sending 4 bytes\n");
-			send_raw_packet(0x82000002, outgoing, 4);
+			// Generate the target subframe
+			if (m_data_requested | (1<<0)) {
+				short subframe_id = htons(0x0002);
+				memcpy(outgoing+datalen, &subframe_id, 2);
+				datalen += 2;
+
+				unsigned short ntargets = htons(m_td->processing_result.targets.size());
+				memcpy(outgoing+datalen, &ntargets, 2);
+				datalen += 2;
+				
+				for (int i=0; i<m_td->processing_result.targets.size(); i++) {
+					Target t = m_td->processing_result.targets[i];
+					short azimuth = htons(t.azimuth * 10);
+					unsigned short elevation = htons(t.elevation * 10);
+					unsigned short distance = htons(t.centroid_distance * 10);
+					unsigned short left = htons(t.px_left);
+					unsigned short right = htons(t.px_right);
+					unsigned short top = htons(t.px_top);
+					unsigned short bottom = htons(t.px_bottom);
+					memcpy(outgoing+datalen, &azimuth, 2);
+					memcpy(outgoing+datalen+2, &elevation, 2);
+					memcpy(outgoing+datalen+4, &distance, 2);
+					memcpy(outgoing+datalen+6, &left, 2);
+					memcpy(outgoing+datalen+8, &right, 2);
+					memcpy(outgoing+datalen+10, &top, 2);
+					memcpy(outgoing+datalen+12, &bottom, 2);
+					datalen += 14;
+				}
+				//memcpy(outgoing, &subframe_id, 2);
+				//memcpy(outgoing+2, contour_data, datalen);
+			}
+			//printf("Sending 4 bytes\n");
+			send_raw_packet(0x82000002, outgoing, datalen);
+			
+			free(outgoing);
 			
 			pthread_mutex_unlock(&m_td->processed_data_lock);
-			m_stateless_pending = 1;
+			m_update_pending = 0;
 		}
 	}
 	return 0;
@@ -224,7 +241,7 @@ int Client::data_receivable(void)
 		memmove(m_databuf, m_databuf+processed, m_databuf_len-processed);
 		m_databuf_len -= processed;
 	}
-	if (m_stateless_pending) {
+	if (m_update_pending) {
 		return 2;
 	}
 	return 0; // 0 is "OK". 2 is "We're waiting on an external event."

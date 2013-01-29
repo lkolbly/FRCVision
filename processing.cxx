@@ -63,6 +63,18 @@ processedImagery_t processFile(const char *in_fname)
 	}
 	*/
 	
+	for (int i=0; i<4; i++) {
+		Target t;
+		t.centroid_distance = 10.0;
+		t.azimuth = 10.0;
+		t.elevation = 10.0;
+		t.px_left = 10;
+		t.px_right = 20;
+		t.px_bottom = 10;
+		t.px_top = 20;
+		v.targets.push_back(t);
+	}
+	
 	return v;
 }
 

@@ -15,7 +15,7 @@ size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 
 void networkingDownloadImage(CURL *c)
 {
-	printf("Downloading file.\n");
+	//printf("Downloading file.\n");
 	FILE *f = fopen("tmp.jpg", "wb");
 	if (!f) {
 		fprintf(stderr, "We couldn't open tmp.jpg...\n");
@@ -23,7 +23,7 @@ void networkingDownloadImage(CURL *c)
 	}
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
 	int success = curl_easy_perform(c);
-	printf("Success was %s\n", curl_easy_strerror((CURLcode)success));
+	//printf("Success was %s\n", curl_easy_strerror((CURLcode)success));
 	fclose(f);
 	//Sleep(1000);
 }
@@ -37,8 +37,8 @@ void *networkMain(void *arg)
 	int last_downloaded = -1;
 	
 	CURL *c = curl_easy_init();
-	curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
-	//curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
+	//curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
+	curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
 	curl_easy_setopt(c, CURLOPT_USERPWD, "FRC:FRC");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
 

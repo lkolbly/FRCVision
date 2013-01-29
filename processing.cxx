@@ -80,7 +80,7 @@ void *processingMain(void *arg)
 			//td->has_processed_image = 1;
 			pthread_mutex_unlock(&td->image_file_lock);
 
-			printf("Processing file.\n");
+			//printf("Processing file.\n");
 			processedImagery_t processed_imagery = processFile("queue.jpg");
 			//Sleep(2000);
 
@@ -88,6 +88,7 @@ void *processingMain(void *arg)
 			processed_imagery.uid = td->collection_cfg.uid;
 			memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
 			pthread_mutex_unlock(&td->processed_data_lock);
+			//printf("It's bloody well unlocked.\n");
 		} else {
 			pthread_mutex_unlock(&td->image_file_lock);
 		}

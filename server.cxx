@@ -63,10 +63,32 @@ Client::Client(int fd, threadData_t *td)
 int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, int buflen)
 {
 	unsigned int l = buflen;
-	send(m_fd, (const char *)&l, 4, 0);
-	send(m_fd, (const char *)&packet_type, 4, 0);
+	union {
+	   unsigned int i;
+	   char j[4];
+	} foo;
+	foo.i = l;
+	for (int i=0; i<4; i++) {
+		send(m_fd, (const char *)&foo.j[i], 1, 0);
+	}
+	foo.i = packet_type;
+	for (int i=0; i<4; i++) {
+		send(m_fd, (const char *)&foo.j[i], 1, 0);
+	}
 	send(m_fd, (const char *)buf, buflen, 0);
 	printf("Sent %i bytes.\n", 8+buflen);
+	foo.i = l;
+	for (int i=0; i<4; i++) {
+		printf("0x%X ", foo.j[i]);
+	}
+	foo.i = packet_type;
+	for (int i=0; i<4; i++) {
+		printf("0x%X ", foo.j[i]);
+	}
+	for (int i=0; i<buflen; i++) {
+		printf("0x%X ", buf[i]);
+	}
+	printf("\n");
 	return 8+buflen;
 }
 
@@ -130,7 +152,8 @@ for(int i = 0; i < M.rows; i++)
 // Update is called when we're in fastloop mode (i.e. waiting for a mutex, or something else not selectable)
 int Client::update(void)
 {
-	if (m_stateless_pending) {
+	if (m_stateless_pending || 1) {
+		//printf("Stateless is pending.\n");
 		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
 			
 #if 0
@@ -156,18 +179,21 @@ int Client::update(void)
 			}
 #endif
 
-			unsigned int datalen;
-			unsigned char *contour_data = m_td->processing_result.render_contours(datalen);
+			unsigned int datalen = 0;
+			unsigned char *contour_data;// = m_td->processing_result.render_contours(datalen);
 			
-			unsigned char *outgoing = (unsigned char*)malloc(10+datalen);
-			short subframe_id = 0x0001;
+			unsigned char *outgoing = (unsigned char*)malloc(4);
+			short subframe_id = 0x0002;
 			memcpy(outgoing, &subframe_id, 2);
-			memcpy(outgoing+2, contour_data, datalen);
-			
-			send_raw_packet(0x82000002, outgoing, datalen+2);
+			unsigned short ntargets = 0;
+			memcpy(outgoing+2, &ntargets, 2);
+			//memcpy(outgoing, &subframe_id, 2);
+			//memcpy(outgoing+2, contour_data, datalen);
+			printf("Sending 4 bytes\n");
+			send_raw_packet(0x82000002, outgoing, 4);
 			
 			pthread_mutex_unlock(&m_td->processed_data_lock);
-			m_stateless_pending = 0;
+			m_stateless_pending = 1;
 		}
 	}
 	return 0;
@@ -187,6 +213,10 @@ int Client::data_receivable(void)
 		return 1;
 	} else {
 		printf("They sent us %i bytes!\n", nbytes);
+		for (int i=0; i<nbytes; i++) {
+			printf("0x%X ", buf[i]);
+		}
+		printf("\n");
 		m_databuf = (unsigned char *)realloc((void*)m_databuf, m_databuf_len+nbytes);
 		memcpy(m_databuf+m_databuf_len, buf, nbytes);
 		m_databuf_len += nbytes;
@@ -246,10 +276,19 @@ void *serverMain(void *arg)
 		for (std::vector<Client*>::iterator it=clients.begin(); it!=clients.end(); ++it) {
 			FD_SET((*it)->getFD(),&rfs);
 		}
+		
+		struct timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 0;
 
-		printf("Selecting...\n");
-		int rval = select(1+clients.size(), &rfs, NULL, NULL, NULL);
-		printf("%i\n", rval);
+		//printf("Selecting...\n");
+		int rval;
+		if (enable_fastloop) {
+			rval = select(1+clients.size(), &rfs, NULL, NULL, NULL);
+		} else {
+			rval = select(1+clients.size(), &rfs, NULL, NULL, &tv);
+		}
+		//printf("%i\n", rval);
 		if (rval == -1) {
 			perror("select");
 			printf("WSA: %i\n", WSAGetLastError());

@@ -59,6 +59,7 @@ Client::Client(int fd, threadData_t *td)
 	m_conn_stage = 0;
 	m_databuf_len = 0;
 	m_databuf = (unsigned char *)malloc(1);
+	m_update_pending = 0;
 }
 
 int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, int buflen)
@@ -101,16 +102,20 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 	
 	unsigned int len;
 	memcpy(&len, buf, 4);
+	len = htonl(len);
 
 	unsigned int packet_type;
 	memcpy(&packet_type, buf+4, 4);
+	packet_type = htonl(packet_type);
 	
+	printf("Len is %lu\n", len);
 	if (nbytes < len+8) {
 		return 0;
 	}
 
 	int camera_ip;
 	unsigned char outgoing[256];
+	printf("Packet type: %ul\n", packet_type);
 	switch (packet_type) {
 	case 0x00000001:
 		// TODO: Actually process something here...
@@ -127,6 +132,7 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		send_raw_packet(0x81000003, outgoing, 6);
 		return 12;
 	case 0x02000001: // They're requesting an update
+		printf("Got a packet, which says they're requesting an update.\n");
 		m_update_pending = 1;
 		m_data_requested = buf[0];
 

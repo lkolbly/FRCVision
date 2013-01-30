@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include <opencv2/opencv.hpp>
+#include <vector>
 #include "processing.hxx"
 
 typedef struct imageryCollectionConfig_t {
@@ -11,6 +12,11 @@ typedef struct imageryCollectionConfig_t {
 	char *image_filename; // The filename of the local file cache
 	int uid;
 } imageryCollection_t;
+
+// Configuration data for the image processor, e.g. what we're tracking.
+typedef struct processorConfig_t {
+	vector<trackingObject_t> targets;
+} processorConfig_t;
 
 typedef struct threadData_t {
 	pthread_mutex_t mutex;
@@ -24,6 +30,7 @@ typedef struct threadData_t {
 	// Information about the processing thread
 	pthread_mutex_t processed_data_lock;
 	processedImagery_t processing_result;
+	processorConfig_t processing_config;
 	
 } threadData_t;
 

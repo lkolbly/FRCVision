@@ -46,7 +46,7 @@ public:
   vector<Vec2i> find_corners(void);
 
   // Find the RMS difference from another polygon
-  double difference(Polygon other);
+  double difference(Polygon *other);
 
   int should_add_line(Vec4i line);
 
@@ -58,16 +58,16 @@ vector<Vec4i> Polygon::get_edges(void) {
 	return m_edges;
 }
 
-double Polygon::difference(Polygon other)
+double Polygon::difference(Polygon *other)
 {
   double sum = 0.0;
   for (size_t i=0; i<m_edges.size(); i++) {
     // Find the closest point on the other polygon
     double min_diff = 10000.0;
-    for (size_t j=0; j<other.get_edges().size(); j++) {
-      double diff = pnt_dist(m_edges[i][0], m_edges[i][1], other.get_edges()[j][0], other.get_edges()[j][1]);
+    for (size_t j=0; j<other->get_edges().size(); j++) {
+      double diff = pnt_dist(m_edges[i][0], m_edges[i][1], other->get_edges()[j][0], other->get_edges()[j][1]);
       if (diff < min_diff) {
-	min_diff = diff;
+		min_diff = diff;
       }
     }
 
@@ -191,6 +191,25 @@ int Polygon::should_add_line(Vec4i line)
   return 0;
 }
 
+Vec4i Polygon::get_bounds(void)
+{
+	int left=1000, right=0, top=0, bottom=1000;
+	for (int i=0; i<m_edges.size(); i++) {
+		if (m_edges[i][0] < left) left = m_edges[i][0];
+		if (m_edges[i][0] > right) right = m_edges[i][0];
+
+		if (m_edges[i][2] < left) left = m_edges[i][2];
+		if (m_edges[i][2] > right) right = m_edges[i][2];
+
+		if (m_edges[i][1] < bottom) bottom = m_edges[i][1];
+		if (m_edges[i][1] > top) top = m_edges[i][1];
+
+		if (m_edges[i][3] < bottom) bottom = m_edges[i][3];
+		if (m_edges[i][3] > top) top = m_edges[i][3];
+	}
+	return Vec4i(left, right, bottom, top);
+}
+
 vector<Polygon> detectRectangles(vector<Vec4i> lines)
 {
   // We iterate through every line. For the beginning and ending points,
@@ -198,7 +217,7 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
   // After discarding shapes that don't have 4 sides, we are left with
   // only quadrangles.
   vector<Polygon> rectangles;
-  printf("We're detecting rectangles in %lu lines.\n", lines.size());
+  //printf("We're detecting rectangles in %lu lines.\n", lines.size());
   for (size_t i=0; i<lines.size(); i++) {
     Polygon p;
     p.add_line(lines[i]);
@@ -224,15 +243,15 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
 #endif
       }
     }
-    printf("p has %lu edges.\n", p.m_edges.size());
+    //printf("p has %lu edges.\n", p.m_edges.size());
     if (p.m_edges.size() == 4) {
       // Find the corners
       vector<Vec2i> corners = p.find_corners();
-      printf(" - ");
+      //printf(" - ");
       for (size_t j=0; j<corners.size(); j++) {
-	printf("%i,%i ", corners[j][0], corners[j][1]);
+	//printf("%i,%i ", corners[j][0], corners[j][1]);
       }
-      printf("\n");
+      //printf("\n");
 
       rectangles.push_back(p);
     }
@@ -243,7 +262,7 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
   for (size_t i=0; i<rectangles.size(); i++) {
     double min_diff = 10000.0;
     for (int j=i-1; j>=0; j--) {
-	double diff = rectangles[i].difference(rectangles[j]);
+	double diff = rectangles[i].difference(&rectangles[j]);
 	if (diff < min_diff) {
 	  min_diff = diff;
 	}
@@ -251,21 +270,21 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
     }
 
     // If we're the first one like this one that we've seen...
-    printf("%lu %f\n", i, min_diff);
+   //printf("%lu %f\n", i, min_diff);
     if (min_diff > 2.0) {
       unique_rectangles.push_back(rectangles[i]);
     }
   }
 
   // Print out the 'unique' rectangles
-  printf("Printing out unique rectangles...\n");
+ //printf("Printing out unique rectangles...\n");
   for (size_t i=0; i<unique_rectangles.size(); i++) {
     vector<Vec2i> corners = unique_rectangles[i].find_corners();
-    printf(" - ");
+   //printf(" - ");
     for (size_t j=0; j<corners.size(); j++) {
-      printf("%i,%i ", corners[j][0], corners[j][1]);
+     //printf("%i,%i ", corners[j][0], corners[j][1]);
     }
-    printf("\n");
+   //printf("\n");
   }
 
   return unique_rectangles;
@@ -409,7 +428,9 @@ double Rectangle3d::find_squareness(Vec2f *coefs, double *dist)
 void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 			double known_w, double known_h)
 {
-  std::cout << "Solving a rectangle...";
+  m_camera_FOV[0] = fovx;
+  m_camera_FOV[1] = fovy;
+  //std::cout << "Solving a rectangle...";
   double k = 0.01; // This is used in the iterative solver.
 
   // Find the four lines that extend to the corners from the camera
@@ -470,7 +491,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
       overall_diff = -k*(90.0-a[0])/2.0;
     }
     for (int i=1; i<4; i++) { // Remember: point 0 is fixed.
-      printf("%f => %f => %f\n", dist[i], a[i], k*(a[i]-90.0)+overall_diff);
+     //printf("%f => %f => %f\n", dist[i], a[i], k*(a[i]-90.0)+overall_diff);
       if (a[i] > 90.0) {
 	dist[i] -= k*(a[i]-90.0);
       } else {
@@ -478,7 +499,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
       }
       dist[i] += overall_diff;
     }
-    printf("\n");
+   //printf("\n");
 #endif
   }
 
@@ -509,7 +530,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
   }
 
   // Some debugging info
-  printf("Adjusted distances to %f,%f,%f,%f\n", m_dist[0], m_dist[1], m_dist[2], m_dist[3]);
+ //printf("Adjusted distances to %f,%f,%f,%f\n", m_dist[0], m_dist[1], m_dist[2], m_dist[3]);
     double est_w = 0.0;
     double est_h = 0.0;
     vector<Vec3f> pnts = get_points();
@@ -520,7 +541,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	est_h = dist3d(pnts[(i+1)%3], pnts[(i+2)%3]);
       }
     }
-    printf("Final estimated size: %fx%f, ar=%f\n", est_w, est_h, est_w/est_h);
+   //printf("Final estimated size: %fx%f, ar=%f\n", est_w, est_h, est_w/est_h);
 }
 
 double Rectangle3d::aspect_ratio(void)
@@ -538,7 +559,7 @@ double Rectangle3d::aspect_ratio(void)
   return est_w / est_h;
 }
 
-double Rectangle3d::centroid_dist(void)
+Vec3f Rectangle3d::get_centroid(void)
 {
   vector<Vec3f> pnts = get_points();
   Vec3f centroid(0,0,0);
@@ -548,7 +569,30 @@ double Rectangle3d::centroid_dist(void)
   centroid[0] = centroid[0] / 4.0;
   centroid[1] = centroid[1] / 4.0;
   centroid[2] = centroid[2] / 4.0;
+  return centroid;
+}
+
+double Rectangle3d::centroid_dist(void)
+{
+  Vec3f centroid = get_centroid();
   return sqrt(centroid[2]*centroid[2]+centroid[1]*centroid[1]+centroid[0]*centroid[0]);
+}
+
+double Rectangle3d::azimuth(void)
+{
+	Vec3f p = get_centroid();
+	return m_camera_FOV[0] * p[0] / (p[2] * sin(DEG2RAD(m_camera_FOV[0])));
+}
+
+double Rectangle3d::elevation(void)
+{
+	Vec3f p = get_centroid();
+	return m_camera_FOV[1] * p[1] / (p[2] * sin(DEG2RAD(m_camera_FOV[1])));
+}
+
+Vec4i Rectangle3d::get_image_bounds(void)
+{
+	return m_p.get_bounds();
 }
 
 vector<Rectangle3d> findRectanglesInImage(Mat src)
@@ -568,7 +612,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
     }
 
     // Detect rectangles
-    printf("We found %lu lines.\n", lines.size());
+   //printf("We found %lu lines.\n", lines.size());
     vector<Polygon> rectangles_2d = detectRectangles(lines);
     vector<Rectangle3d> rectangles_3d;
     for (size_t i=0; i<rectangles_2d.size(); i++) {
@@ -591,7 +635,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 int main(int argc, char** argv)
 {
     std::cout << "Hello?\n";
-  printf("Welcome to the thing...\n");
+ //printf("Welcome to the thing...\n");
     Mat src, dst, color_dst;
     if( argc != 2 || !(src=imread(argv[1], 0)).data)
         return -1;
@@ -600,7 +644,7 @@ int main(int argc, char** argv)
     Canny( src, dst, 50, 200, 3 );
     cvtColor( dst, color_dst, CV_GRAY2BGR );
 
-    printf("Hello?\n");
+   //printf("Hello?\n");
 
 #if 0
     vector<Vec2f> lines;
@@ -628,7 +672,7 @@ int main(int argc, char** argv)
     }
 
     // Detect rectangles
-    printf("We found %lu lines.\n", lines.size());
+   //printf("We found %lu lines.\n", lines.size());
     vector<Polygon> rectangles_2d = detectRectangles(lines);
     vector<Rectangle3d> rectangles_3d;
     for (size_t i=0; i<rectangles_2d.size(); i++) {

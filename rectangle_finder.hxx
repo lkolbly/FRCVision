@@ -1,61 +1,74 @@
-#ifndef RECTANGLE_FINDER_HXX
-#define RECTANGLE_FINDER_HXX
+#ifndef RECTANGLE2_FINDER_HXX
+#define RECTANGLE2_FINDER_HXX
 
-#include <opencv/cv.h>
+#include <opencv2/opencv.hpp>
 #include <vector>
 
-using namespace std;
+//using namespace std;
 using namespace cv;
 
+//class Polygon;
+
+#if 1
 class Polygon {
 public:
-  vector<Vec4i> m_edges;
-  Vec2i m_endpoints[2];
+  std::vector<Vec4i> m_edges;
+  cv::Vec2i m_endpoints[2];
 
   // Finds the min. distance between our endpoints and the line
-  double dist_to_line(Vec4i line);
+  double dist_to_line(cv::Vec4i line);
 
   // Adds the line to us, attaching the nearest neighbors.
-  void add_line(Vec4i line);
+  void add_line(cv::Vec4i line);
 
-  int contains(Vec4i line);
+  int contains(cv::Vec4i line);
 
   // Find all the corners of this polygon
-  vector<Vec2i> find_corners(void);
+  std::vector<cv::Vec2i> find_corners(void);
+  
+  // Find the bound rectangle of this polygon
+  cv::Vec4i get_bounds(void);
 
   // Find the RMS difference from another polygon
-  double difference(Polygon other);
+  double difference(Polygon *other);
 
-  int should_add_line(Vec4i line);
+  int should_add_line(cv::Vec4i line);
 
-  vector<Vec4i> get_edges(void);
+  std::vector<cv::Vec4i> get_edges(void);
 };
+#endif
 
 class Rectangle3d {
 private:
   Polygon m_p;
-  Vec2f m_corners[4];
+  cv::Vec2f m_corners[4];
   double m_dist[4];
-  Vec2f m_coefs[4];
+  cv::Vec2f m_coefs[4];
+  
+  cv::Vec2f m_camera_FOV;
 
 public:
   Rectangle3d(Polygon p);
   void solve(double w, double h, double fovx, double fovy,
 	     double known_w, double known_h);
-  Vec2f coef_from_point(double x, double y, double w, double h,
+  cv::Vec2f coef_from_point(double x, double y, double w, double h,
 			double fovx, double fovy);
-  double find_squareness(Vec2f *coefs, double *dist);
+  double find_squareness(cv::Vec2f *coefs, double *dist);
 
-  vector<Vec3f> get_points(double *dist);
-  vector<Vec3f> get_points(void);
+  std::vector<cv::Vec3f> get_points(double *dist);
+  std::vector<cv::Vec3f> get_points(void);
+  cv::Vec3f get_centroid(void);
 
   // Returns the distance to the geometric mean
   double distance(void);
   double centroid_dist(void);
 
   double aspect_ratio(void);
+  double azimuth(void);
+  double elevation(void);
+  cv::Vec4i get_image_bounds(void);
 };
 
-vector<Rectangle3d> findRectanglesInImage(Mat img);
+std::vector<Rectangle3d> findRectanglesInImage(Mat img);
 
 #endif

@@ -75,8 +75,9 @@ int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, 
 	packet_type = htonl(packet_type); // Swap the endianness
 	send(m_fd, (const char *)&packet_type, 4, 0);
 	send(m_fd, (const char *)buf, buflen, 0);
-	
+
 	// Print some debug information
+#if 0
 	printf("Sent %i bytes.\n", 8+buflen);
 	foo.i = l;
 	for (int i=0; i<4; i++) {
@@ -90,6 +91,7 @@ int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, 
 		printf("0x%X ", buf[i]);
 	}
 	printf("\n");
+#endif
 	return 8+buflen;
 }
 
@@ -108,14 +110,14 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 	memcpy(&packet_type, buf+4, 4);
 	packet_type = htonl(packet_type);
 	
-	printf("Len is %lu\n", len);
+	//printf("Len is %lu\n", len);
 	if (nbytes < len+8) {
 		return 0;
 	}
 
 	int camera_ip;
 	unsigned char outgoing[256];
-	printf("Packet type: %ul\n", packet_type);
+	//printf("Packet type: %ul\n", packet_type);
 	switch (packet_type) {
 	case 0x00000001:
 		// TODO: Actually process something here...
@@ -132,7 +134,7 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		send_raw_packet(0x81000003, outgoing, 6);
 		return 12;
 	case 0x02000001: // They're requesting an update
-		printf("Got a packet, which says they're requesting an update.\n");
+		//printf("Got a packet, which says they're requesting an update.\n");
 		m_update_pending = 1;
 		m_data_requested = buf[0];
 
@@ -228,18 +230,20 @@ int Client::data_receivable(void)
 	if (m_fd == -1) {
 		return 1;
 	}
-	printf("I have a m_fd! It's %i!\n", m_fd);
+	//printf("I have a m_fd! It's %i!\n", m_fd);
 	char buf[1024];
 	int nbytes = recv(m_fd, buf, 1024, 0);
 	if (-1 == nbytes || 0 == nbytes) {
 		printf("They've disconnected from us!\n");
 		return 1;
 	} else {
+#if 0
 		printf("They sent us %i bytes!\n", nbytes);
 		for (int i=0; i<nbytes; i++) {
 			printf("0x%X ", buf[i]);
 		}
 		printf("\n");
+#endif
 		m_databuf = (unsigned char *)realloc((void*)m_databuf, m_databuf_len+nbytes);
 		memcpy(m_databuf+m_databuf_len, buf, nbytes);
 		m_databuf_len += nbytes;
@@ -329,7 +333,7 @@ void *serverMain(void *arg)
 		for (std::vector<Client*>::iterator it=clients.begin(); it!=clients.end(); ++it) {
 			if (FD_ISSET((*it)->getFD(),&rfs)) {
 				// Looks like we found someone!
-				printf("Client can talk.\n");
+				//printf("Client can talk.\n");
 				int retval = (*it)->data_receivable();
 				if (retval == 1) {
 					clients.erase(it);

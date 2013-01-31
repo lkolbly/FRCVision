@@ -266,7 +266,7 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
 	if (diff < min_diff) {
 	  min_diff = diff;
 	}
-	printf("%lu %i %f\n", i, j, diff);
+	//printf("%lu %i %f\n", i, j, diff);
     }
 
     // If we're the first one like this one that we've seen...

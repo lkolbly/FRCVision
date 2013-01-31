@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <windows.h>
+#include <algorithm>
 #include "processing.hxx"
 #include "semaphores.hxx"
 
@@ -36,10 +37,22 @@ unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 	return (unsigned char *)data;
 }
 
-#define USE_DUMMY_TARGET_DATA 1
+#define USE_DUMMY_TARGET_DATA 0
+
+bool sortTargets(Target a, Target b)
+{
+	Vec2i pa((a.px_left+a.px_right)/2,(a.px_top+a.px_bottom)/2);
+	Vec2i pb((b.px_left+b.px_right)/2,(b.px_top+b.px_bottom)/2);
+	if (pa[0] > pb[0]) {
+		return false;
+	}
+	return true;
+}
 
 processedImagery_t processFile(const char *in_fname)
 {
+	//printf("Processing image '%s'\n", in_fname);
+
 	processedImagery_t v;
 	v.img_data = imread(in_fname);
 	
@@ -93,6 +106,8 @@ processedImagery_t processFile(const char *in_fname)
 		t.px_bottom = bounds[3];
 		v.targets.push_back(t);
 	}
+	//std::sort(v.targets.begin(), v.targets.end(), sortTargets);
+	printf("I have %i targets!\n", v.targets.size());
 #endif
 	
 	return v;
@@ -107,17 +122,22 @@ void *processingMain(void *arg)
 	while (1) {
 		pthread_mutex_lock(&td->image_file_lock);
 		if (td->processing_result.uid != td->collection_cfg.uid) {
+			//printf("%i %i\n", td->processing_result.uid, td->collection_cfg.uid);
 			//printf("%i\n", td->processing_result.uid);
-			MoveFile("new.jpg", "queue.jpg"); // Copy out the file
+			Sleep(20);
+			CopyFile("storage-tmp.jpg", "processing-tmp.jpg", false); // Copy out the file
+			//printf("Moved file to processing-tmp.jpg\n");
 			//td->has_processed_image = 1;
 			pthread_mutex_unlock(&td->image_file_lock);
 
 			//printf("Processing file.\n");
-			processedImagery_t processed_imagery = processFile("queue.jpg");
-			//Sleep(2000);
+			Sleep(50);
+			processedImagery_t processed_imagery = processFile("processing-tmp.jpg");
+			Sleep(50);
 
 			pthread_mutex_lock(&td->processed_data_lock);
 			processed_imagery.uid = td->collection_cfg.uid;
+			td->processing_result.uid = td->collection_cfg.uid;
 			memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
 			pthread_mutex_unlock(&td->processed_data_lock);
 			//printf("It's bloody well unlocked.\n");

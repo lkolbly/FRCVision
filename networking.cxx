@@ -16,7 +16,7 @@ size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 void networkingDownloadImage(CURL *c)
 {
 	//printf("Downloading file.\n");
-	FILE *f = fopen("tmp.jpg", "wb");
+	FILE *f = fopen("network-tmp.jpg", "wb");
 	if (!f) {
 		fprintf(stderr, "We couldn't open tmp.jpg...\n");
 		return;
@@ -41,6 +41,7 @@ void *networkMain(void *arg)
 	//curl_easy_setopt(c, CURLOPT_URL, "http://10.4.18.12/axis-cgi/jpg/image.cgi");
 	char camera_url[1024];
 	snprintf(camera_url, 1024, "http://%s/axis-cgi/jpg/image.cgi", td->collection_cfg.camera_hostname);
+	printf("Using camera URL '%s'\n", camera_url);
 	curl_easy_setopt(c, CURLOPT_URL, camera_url);
 	curl_easy_setopt(c, CURLOPT_USERPWD, "FRC:FRC");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_func);
@@ -57,7 +58,9 @@ void *networkMain(void *arg)
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		MoveFile("tmp.jpg", td->collection_cfg.image_filename);
+		//printf("DOWNLOADING IMAGE.\n");
+		CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
+		Sleep(50);
 		td->has_processed_image = 0;
 		td->collection_cfg.uid = rand();
 		pthread_mutex_unlock(&td->image_file_lock);

@@ -48,6 +48,7 @@ cfgStartElem(void *data, const char *el, const char **attr)
 		o->is_parsing_text = 1;
 	} else if (strcmp(el, "camera") == 0) {
 		o->td->collection_cfg.camera_hostname = strdup(getAttribute("ip", attr));
+		printf("The camera hostname is set to '%s'\n", o->td->collection_cfg.camera_hostname);
 	}
 	return;
 }

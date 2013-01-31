@@ -9,7 +9,9 @@ class MyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         files = os.listdir("test-data")
         SWITCH_TIME = 10
         choice = int((time.time()%(SWITCH_TIME*len(files))) / SWITCH_TIME)
-        self.wfile.write(open("test-data/%s"%files[choice]).read())
+        data = open("test-data\\%s"%files[choice], "rb").read()
+        print choice, files[choice], len(data)
+        self.wfile.write(data)
         pass
 
 def run(server_class=BaseHTTPServer.HTTPServer,

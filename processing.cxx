@@ -36,6 +36,8 @@ unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 	return (unsigned char *)data;
 }
 
+#define USE_DUMMY_TARGET_DATA 1
+
 processedImagery_t processFile(const char *in_fname)
 {
 	processedImagery_t v;
@@ -64,10 +66,21 @@ processedImagery_t processFile(const char *in_fname)
 	}
 	*/
 	
-	//vector<Rectangle3d> rectangles = findRectanglesInImage(v.img_data);
-	//for (int i=0; i<rectangles.size(); i++) {
+#if USE_DUMMY_TARGET_DATA
 	for (int i=0; i<4; i++) {
-#if 0
+		Target t;
+		t.centroid_distance = 10.0+i;
+		t.azimuth = 20.0+i;
+		t.elevation = 30.0+i;
+		t.px_left = 10+i;
+		t.px_top = 20+i;
+		t.px_right = 30+i;
+		t.px_bottom = 40+i;
+		v.targets.push_back(t);
+	}
+#else
+	vector<Rectangle3d> rectangles = findRectanglesInImage(v.img_data);
+	for (int i=0; i<rectangles.size(); i++) {
 		Rectangle3d r = rectangles[i];
 		Target t;
 		t.centroid_distance = r.centroid_dist();
@@ -75,24 +88,12 @@ processedImagery_t processFile(const char *in_fname)
 		t.elevation = r.elevation();
 		Vec4i bounds = r.get_image_bounds();
 		t.px_left = bounds[0];
-		t.px_right = bounds[1];
-		t.px_bottom = bounds[2];
-		t.px_top = bounds[3];
+		t.px_top = bounds[1];
+		t.px_right = bounds[2];
+		t.px_bottom = bounds[3];
 		v.targets.push_back(t);
-#endif
-
-#if 1
-		Target t;
-		t.centroid_distance = 10.0;
-		t.azimuth = 10.0;
-		t.elevation = 10.0;
-		t.px_left = 10;
-		t.px_right = 20;
-		t.px_bottom = 10;
-		t.px_top = 20;
-		v.targets.push_back(t);
-#endif
 	}
+#endif
 	
 	return v;
 }

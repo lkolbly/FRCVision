@@ -9,6 +9,8 @@
 using namespace std;
 using namespace cv;
 
+int processing_Debug_Counter = 0;
+
 unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 {
 	char *data = (char*)malloc(1024);
@@ -54,13 +56,19 @@ processedImagery_t processFile(const char *in_fname)
 	//printf("Processing image '%s'\n", in_fname);
 
 	processedImagery_t v;
+	FILE *f = fopen(in_fname, "rb");
+	if (!f) {
+		printf("Could not open %s\n", in_fname);
+		return v;
+	}
+	fclose(f);
 	v.img_data = imread(in_fname);
-	
+
 	// Make it grayscale
 	Mat gray;
 	cvtColor(v.img_data, gray, CV_BGR2GRAY);
 	blur(gray, gray, Size(3,3));
-	
+
 	// Find contours
 	Mat canny_output;
 	vector<vector<Point> > contours;
@@ -70,6 +78,7 @@ processedImagery_t processFile(const char *in_fname)
 	findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0,0));
 	
 	v.contours = contours;
+	
 	/*
 	for (int i=0; i<contours.size(); i++) {
 		printf("%i: %i has %i points\n", i, hierarchy[i][0], contours[i].size());
@@ -109,7 +118,7 @@ processedImagery_t processFile(const char *in_fname)
 	//std::sort(v.targets.begin(), v.targets.end(), sortTargets);
 	printf("I have %i targets!\n", v.targets.size());
 #endif
-	
+
 	return v;
 }
 

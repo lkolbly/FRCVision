@@ -184,7 +184,7 @@ double dist_pnt_to_line(Vec2i p, Vec4i l)
 int Polygon::should_add_line(Vec4i line)
 {
   double d = dist_to_line(line);
-  if (d < 5) {
+  if (d < 15) {
     return 1;
   }
 
@@ -595,21 +595,221 @@ Vec4i Rectangle3d::get_image_bounds(void)
 	return m_p.get_bounds();
 }
 
+int rectangle_Finder_Debug_Counter = 0;
+
+void outputPicture(const char *name, Mat img)
+{
+	char buf[1024];
+	snprintf(buf, 1024, "debug/%s_%04i.jpg", name, rectangle_Finder_Debug_Counter);
+	imwrite(buf, img);
+}
+
 vector<Rectangle3d> findRectanglesInImage(Mat src)
 {
+	
+	rectangle_Finder_Debug_Counter++;
     Mat dst, color_dst;
+	
+	cvtColor(src, src, CV_BGR2GRAY);
 
     resize(src, src, Size(640,480));
-    Canny( src, dst, 50, 200, 3 );
-    cvtColor( dst, color_dst, CV_GRAY2BGR );
+
+	GaussianBlur(src, src, Size(5, 5), 0, 0);
+	//outputPicture("blur", src);
+
+	threshold( src, src, 127, 255, 0 );
+	//outputPicture("threshold", src);
 	
+	// Let's mess with "goodfeaturestotrack"
+	Mat src2;
+	src.copyTo(src2);
+	cvtColor(src2, src2, CV_GRAY2BGR);
+    cv::FeatureDetector* blobDetect = new cv::GoodFeaturesToTrackDetector(1000,0.1,1.0,3,false,0.04);
+	std::vector<cv::KeyPoint> kps;
+	vector<Vec2f> kps2;
+    blobDetect->detect(src, kps);
+	for (int i=0; i<kps.size(); i++) {
+        cv::KeyPoint blob = kps[i];
+        rectangle(src2, cv::Point(blob.pt.x-2, blob.pt.y-2), cv::Point(blob.pt.x+blob.size+2, blob.pt.y+blob.size+2), cv::Scalar(0,255,255), 1, 8);
+		Vec2f k;
+		k[0] = blob.pt.x;
+		k[1] = blob.pt.y;
+		kps2.push_back(k);
+    }
+	outputPicture("gftt", src2);
+	
+	// Get rid of all blobs that are far away
+	vector<vector<Vec2f> > point_clouds;
+	for (int i=0; i<kps2.size(); i++) {
+		bool did_add = false;
+		// We're deciding which point cloud to add kps2[i] to
+		for (int j=0; j<point_clouds.size(); j++) {
+			// Find the nearest one in the point cloud
+			double min_dist = 10000.0;
+			for (int k=0; k<point_clouds[j].size(); k++) {
+				Vec2f p1 = point_clouds[j][k];
+				Vec2f p2 = kps2[i];
+				Vec2f diff;
+				diff[0] = p2[0]-p1[0];
+				diff[1] = p2[1]-p1[1];
+				double dist = sqrt(diff[0]*diff[0] + diff[1]*diff[1]);
+				if (dist < min_dist) min_dist = dist;
+			}
+			if (min_dist < 40) {
+				// Add it
+				point_clouds[j].push_back(kps2[i]);
+				did_add = true;
+				break;
+			}
+		}
+
+		if (!did_add) {
+			// Create a new point cloud, containing this point
+			vector<Vec2f> cloud;
+			cloud.push_back(kps2[i]);
+			point_clouds.push_back(cloud);
+		}
+	}
+
+	// Merge nearby point clouds
+	printf("Number of point clouds: %i\n", point_clouds.size());
+	vector<vector<Vec2f> > new_point_clouds;
+	for (int i=0; i<point_clouds.size(); i++) {
+		vector<Vec2f> cloud;
+		bool did_merge_down = false;
+		for (int k=0; k<point_clouds[i].size(); k++) {
+			cloud.push_back(point_clouds[i][k]);
+		}
+		for (int j=0; j<point_clouds.size(); j++) {
+			//printf("Hello? %i %i %i\n", i, j, point_clouds.size());
+			if (i == j) {
+				continue;
+			}
+			double min_dist = 10000.0;
+			for (int k=0; k<point_clouds[i].size(); k++) {
+				for (int m=0; m<point_clouds[j].size(); m++) {
+					Vec2f p1 = point_clouds[j][m];
+					Vec2f p2 = point_clouds[i][k];
+					Vec2f diff;
+					diff[0] = p2[0]-p1[0];
+					diff[1] = p2[1]-p1[1];
+					double dist = sqrt(diff[0]*diff[0] + diff[1]*diff[1]);
+					if (dist < min_dist) {
+						min_dist = dist;
+					}
+				}
+			}
+
+			if (min_dist < 80) {
+				// Tack it onto cloud
+				for (int k=0; k<point_clouds[j].size(); k++) {
+					cloud.push_back(point_clouds[j][k]);
+				}
+				
+				if (j < i) {
+					did_merge_down = true;
+				}
+			}
+			
+#if 0
+			if (min_dist < 40) {
+				// Merge them.
+				if (j > i) {
+				printf("Merging clouds %i and %i dist=%f.\n", i, j, min_dist);
+				vector<Vec2f> cloud;
+				for (int k=0; k<point_clouds[i].size(); k++) {
+					cloud.push_back(point_clouds[i][k]);
+				}
+				for (int k=0; k<point_clouds[j].size(); k++) {
+					cloud.push_back(point_clouds[j][k]);
+				}
+				new_point_clouds.push_back(cloud);
+				}
+			} else {
+				// Don't merge them (i.e. do nothing).
+				vector<Vec2f> cloud;
+				for (int k=0; k<point_clouds[i].size(); k++) {
+					cloud.push_back(point_clouds[i][k]);
+				}
+				new_point_clouds.push_back(cloud);
+			}
+#endif
+		}
+		if (!did_merge_down) {
+			new_point_clouds.push_back(cloud);
+		}
+	}
+
+	// Convex hull this sucker
+	point_clouds = new_point_clouds;
+	vector<vector<Vec2f> > hulls;
+	printf("There are %i (%i) point clouds.\n", point_clouds.size(), new_point_clouds.size());
+	for (int i=0; i<point_clouds.size(); i++) {
+		printf("Point cloud %i has %i points.\n", i, point_clouds[i].size());
+		vector<Vec2f> hull;
+		if (point_clouds[i].size() > 0) {
+			convexHull(point_clouds[i], hull);
+			for (int i=0; i<hull.size()-1; i++) {
+				line(src2, Point(hull[i]), Point(hull[i+1]), Scalar(0,0,255), 1, 8);
+			}
+			hulls.push_back(hull);
+		}
+	}
+
+	// Find the four corners for each hull
+	for (int i=0; i<hulls.size(); i++) {
+		Vec2f centroid(0,0);
+		for (int j=0; j<hulls[i].size(); j++) {
+			centroid[0] += hulls[i][j][0];
+			centroid[1] += hulls[i][j][1];
+		}
+		centroid[0] = centroid[0] / hulls[i].size();
+		centroid[1] = centroid[1] / hulls[i].size();
+		
+		// Now, order the points so that we can apply the other formula
+		vector<double> angles;
+		for (int j=0; j<hulls[i].size(); j++) {
+		}
+
+		// Find the centroid
+		// But first, find the area.
+#if 0
+		double A = 0.0;
+		for (int j=0; j<hulls[i].size()-1; j++) {
+			A += hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1];
+		}
+		A = 0.5 * A;
+		
+		// Now, find the centroid
+		Vec2f centroid(0,0);
+		for (int j=0; j<hulls[i].size()-1; j++) {
+			centroid[0] += (hulls[i][j][0] + hulls[i][j+1][0]) * (hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1]);
+			centroid[1] += (hulls[i][j][1] + hulls[i][j+1][1]) * (hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1]);
+		}
+		centroid[0] *= 1.0/(6.0 * A);
+		centroid[1] *= 1.0/(6.0 * A);
+		printf("We have a centroid, and I'm not telling what it is. (%f,%f)\n", centroid[0], centroid[1]);
+#endif
+
+		circle(src2, Point(centroid[0], centroid[1]), 10, Scalar(0,255,255), 2);
+	}
+	outputPicture("cvxhull", src2);
+
+    Canny( src, dst, 50, 200, 3, true );
+    cvtColor( dst, color_dst, CV_GRAY2BGR );
+
+	//outputPicture("canny", color_dst);
+
     vector<Vec4i> lines;
-    HoughLinesP( dst, lines, 1, CV_PI/180, 50, 10, 20 );
+	// Rho (distance), theta, threshold, minlen, maxgap
+    HoughLinesP( dst, lines, 1, CV_PI/3600, 10, 10, 15 );
     for( size_t i = 0; i < lines.size(); i++ )
     {
         line( color_dst, Point(lines[i][0], lines[i][1]),
             Point(lines[i][2], lines[i][3]), Scalar(0,0,255), 3, 8 );
     }
+
+	//outputPicture("lines", color_dst);
 
     // Detect rectangles
    //printf("We found %lu lines.\n", lines.size());
@@ -619,7 +819,14 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
       Rectangle3d r(rectangles_2d[i]);
       r.solve((double)src.size().width, (double)src.size().height, 60.0,60.0, 7.0,2.75);
       rectangles_3d.push_back(r);
+	  
+	  // Add the edges of the rects to color_dst
+	  Vec4i b = r.get_image_bounds();
+	  printf("%i %i %i %i\n", b[0],b[1],b[2],b[3]);
+	  rectangle(color_dst, Point(b[0], b[1]), Point(b[2], b[3]), Scalar(0,255,0), 1, 8);
     }
+	
+	outputPicture("lines", color_dst);
 
     // Print information on all of them with roughly the right aspect ratio
     for (size_t i=0; i<rectangles_3d.size(); i++) {

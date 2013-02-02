@@ -27,6 +27,7 @@ class Client
 {
 private:
 	threadData_t *m_td;
+	int m_id;
 	int m_fd;
 	int m_conn_stage; // 0=Needs handshake, 1=has handshake
 	int m_update_pending; // Are we pending an update for a stateless client?
@@ -54,6 +55,7 @@ Client::Client()
 
 Client::Client(int fd, threadData_t *td)
 {
+	m_id = fd;
 	m_td = td;
 	m_fd = fd;
 	m_conn_stage = 0;
@@ -78,7 +80,7 @@ int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, 
 
 	// Print some debug information
 #if 0
-	printf("Sent %i bytes.\n", 8+buflen);
+	printf("%i: Sent %i bytes.\n", m_id, 8+buflen);
 	foo.i = l;
 	for (int i=0; i<4; i++) {
 		printf("0x%X ", foo.j[i]);
@@ -102,6 +104,8 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		return 0;
 	}
 	
+	//printf("%i: Processing %i bytes.\n", m_id, nbytes);
+	
 	unsigned int len;
 	memcpy(&len, buf, 4);
 	len = htonl(len);
@@ -124,6 +128,7 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 		outgoing[0] = 0x00;
 		outgoing[1] = 0x00;
 		send_raw_packet(0x80000001, outgoing, 2);
+		//printf("%i: Sending handshake.\n", m_id);
 		return 12;
 	case 0x01000003:
 		// Get the camera IP address...
@@ -140,7 +145,7 @@ int Client::process_bytes(const unsigned char *buf, int nbytes)
 
 		return 11;
 	default:
-		printf("Unknown packet!\n");
+		printf("%i: Unknown packet!\n", m_id);
 		return len+8; // Skip unknown packets...
 	}
 
@@ -310,7 +315,7 @@ void *serverMain(void *arg)
 
 		//printf("Selecting...\n");
 		int rval;
-		if (enable_fastloop) {
+		if (!enable_fastloop) {
 			rval = select(1+clients.size(), &rfs, NULL, NULL, NULL);
 		} else {
 			rval = select(1+clients.size(), &rfs, NULL, NULL, &tv);
@@ -324,8 +329,8 @@ void *serverMain(void *arg)
 
 		if (FD_ISSET(sockfd, &rfs)) {
 			// There's someone new wanting a connection!
-			printf("There's a new connection!\n");
 			int new_fd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
+			printf("There's a new connection %i!\n", new_fd);
 			Client *c = new Client(new_fd, td);
 			clients.push_back(c);
 		}

@@ -9,6 +9,7 @@ by changing "#if 1" to "#if 0" and back */
 #include <unistd.h>
 #include <stdio.h>
 #include <vector>
+#include <algorithm>
 #include "rectangle_finder.hxx"
 
 #define DEG2RAD(x) ((x)/57.2957795)
@@ -26,6 +27,11 @@ double pnt_dist(double x1, double y1, double x2, double y2)
   double d = sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
   //printf("%f,%f,%f,%f => %f\n", x1,y1,x2,y2, d);
   return d;
+}
+
+double vec_dist(Vec2f v1, Vec2f v2)
+{
+	return pnt_dist(v1[0], v1[1], v2[0], v2[1]);
 }
 
 #if 0
@@ -604,6 +610,29 @@ void outputPicture(const char *name, Mat img)
 	imwrite(buf, img);
 }
 
+double getReferenceAngle(Vec2f a, Vec2f b) {
+	return RAD2DEG(atan2(a[1]-b[1], a[0]-b[0]));
+}
+
+class HullVertexComparator
+{
+public:
+	Vec2f m_centroid;
+	bool operator() (Vec2f a, Vec2f b) {
+		double a1 = RAD2DEG(atan2(a[1]-m_centroid[1], a[0]-m_centroid[0]));
+		double a2 = RAD2DEG(atan2(b[1]-m_centroid[1], a[0]-m_centroid[0]));
+		printf("Centroid=<%f,%f> a=<%f,%f>=>%f b=<%f,%f>=>%f\n", m_centroid[0], m_centroid[1], a[0], a[1], a1, b[0], b[1], a2);
+		return a1>a2;
+	};
+};
+
+Vec2f normalize(Vec2f v)
+{
+	double l = sqrt(v[0]*v[0] + v[1]*v[1]);
+	Vec2f v2(v[0]/l, v[1]/l);
+	return v2;
+}
+
 vector<Rectangle3d> findRectanglesInImage(Mat src)
 {
 	
@@ -765,36 +794,109 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		}
 		centroid[0] = centroid[0] / hulls[i].size();
 		centroid[1] = centroid[1] / hulls[i].size();
-		
+
 		// Now, order the points so that we can apply the other formula
-		vector<double> angles;
 		for (int j=0; j<hulls[i].size(); j++) {
 		}
+		HullVertexComparator h;
+		h.m_centroid = centroid;
+		std::sort(hulls[i].begin(), hulls[i].end(), h);
+		for (int j=0; j<hulls[i].size(); j++) {
+			double a = getReferenceAngle(hulls[i][j], centroid);
+			printf("Centroid: <%f,%f> Hull %i, pnt %i: <%f,%f> => %f\n", centroid[0], centroid[1], i, j, hulls[i][j][0], hulls[i][j][1], a);
+		}
+		circle(src2, Point(centroid[0], centroid[1]), 5, Scalar(0,255,255), 2);
 
 		// Find the centroid
 		// But first, find the area.
-#if 0
+#if 1
 		double A = 0.0;
+#if 0
 		for (int j=0; j<hulls[i].size()-1; j++) {
-			A += hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1];
 		}
-		A = 0.5 * A;
-		
+#endif
+
 		// Now, find the centroid
-		Vec2f centroid(0,0);
+		//Vec2f centroid(0,0);
+		centroid[0] = centroid[1] = 0;
 		for (int j=0; j<hulls[i].size()-1; j++) {
-			centroid[0] += (hulls[i][j][0] + hulls[i][j+1][0]) * (hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1]);
-			centroid[1] += (hulls[i][j][1] + hulls[i][j+1][1]) * (hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1]);
+			double a = hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1];
+			centroid[0] += (hulls[i][j][0] + hulls[i][j+1][0]) * a;
+			centroid[1] += (hulls[i][j][1] + hulls[i][j+1][1]) * a;
+			A += a;
+			printf("centroid=<%f,%f> a=%f A=%f\n", centroid[0], centroid[1], a, A);
 		}
+
+		// Do the last vertex
+		double a = hulls[i][hulls[i].size()-1][0] * hulls[i][0][1] - hulls[i][0][0] * hulls[i][hulls[i].size()-1][1];
+		centroid[0] += (hulls[i][hulls[i].size()-1][0] + hulls[i][0][0]) * a;
+		centroid[1] += (hulls[i][hulls[i].size()-1][1] + hulls[i][0][1]) * a;
+		A += a;
+
+		A = 0.5 * A;
 		centroid[0] *= 1.0/(6.0 * A);
 		centroid[1] *= 1.0/(6.0 * A);
-		printf("We have a centroid, and I'm not telling what it is. (%f,%f)\n", centroid[0], centroid[1]);
+		printf("We have a centroid, and I'm not telling what it is. (%f,%f A=%f)\n", centroid[0], centroid[1], A);
 #endif
 
 		circle(src2, Point(centroid[0], centroid[1]), 10, Scalar(0,255,255), 2);
 	}
+
+	// Find the rectangle edges for each hull...
+	for (int i=0; i<hulls.size(); i++) {
+		if (hulls[i].size() < 4) {
+			continue;
+		}
+
+		// Loop through and find the four angles closest to 90deg
+		// For convinience, add #0 to the end
+
+		double closest_dps[4] = {90.0, 90.0, 90.0, 90.0};
+		int closest_indices[4] = {-1,-1,-1,-1};
+		double SKIP_DIST = 40.0;
+		int SKIP_CNT = 3;
+		for (int j=0; j<hulls[i].size(); j++) {
+			int index0 = (j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
+			int index1 = j;
+			int index2 = (j+SKIP_CNT) % hulls[i].size();
+			Vec2f v1 = normalize(hulls[i][index1] - hulls[i][index2]);
+			Vec2f v2 = normalize(hulls[i][index0] - hulls[i][index1]);
+			double dp = fabs(v1[0]*v2[0] + v1[1]*v2[1]);
+			for (int k=0; k<4; k++) {
+				if (dp < closest_dps[k]) {
+					// Check to make sure that we're not too close to another one
+					bool is_too_close = false;
+					for (int m=0; m<4; m++) {
+						if (m != k) {
+							// Check the distance
+							if (closest_indices[m] > -1) {
+							double dist = vec_dist(hulls[i][index1],hulls[i][closest_indices[m]]);
+							printf("Distance between %i and %i is %f\n", index1, closest_indices[m], dist);
+							if (dist < SKIP_DIST) {
+								is_too_close = true;
+								break;
+							}
+							}
+						}
+					}
+					if (!is_too_close) {
+						closest_dps[k] = dp;
+						closest_indices[k] = j;
+						break;
+					}
+				}
+			}
+		}
+
+		// Render these four points
+		for (int j=0; j<4; j++) {
+			printf("Closest DPS %i: %f\n", j, closest_dps[j]);
+			circle(src2, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), 10, Scalar(255,0,255), 2);
+		}
+	}
 	outputPicture("cvxhull", src2);
 
+	// Alright, back to the "canonical" algorithm
     Canny( src, dst, 50, 200, 3, true );
     cvtColor( dst, color_dst, CV_GRAY2BGR );
 

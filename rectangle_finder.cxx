@@ -190,7 +190,7 @@ double dist_pnt_to_line(Vec2i p, Vec4i l)
 int Polygon::should_add_line(Vec4i line)
 {
   double d = dist_to_line(line);
-  if (d < 15) {
+  if (d < 20) {
     return 1;
   }
 
@@ -620,7 +620,7 @@ public:
 	Vec2f m_centroid;
 	bool operator() (Vec2f a, Vec2f b) {
 		double a1 = RAD2DEG(atan2(a[1]-m_centroid[1], a[0]-m_centroid[0]));
-		double a2 = RAD2DEG(atan2(b[1]-m_centroid[1], a[0]-m_centroid[0]));
+		double a2 = RAD2DEG(atan2(b[1]-m_centroid[1], b[0]-m_centroid[0]));
 		printf("Centroid=<%f,%f> a=<%f,%f>=>%f b=<%f,%f>=>%f\n", m_centroid[0], m_centroid[1], a[0], a[1], a1, b[0], b[1], a2);
 		return a1>a2;
 	};
@@ -631,6 +631,131 @@ Vec2f normalize(Vec2f v)
 	double l = sqrt(v[0]*v[0] + v[1]*v[1]);
 	Vec2f v2(v[0]/l, v[1]/l);
 	return v2;
+}
+
+Mat myHaughTransform(vector<Vec2f> hull, const char *img_name)
+{
+	printf("Haugh transforming a hull of size %i\n", hull.size());
+
+	Vec2f centroid(0,0);
+	for (int j=0; j<hull.size(); j++) {
+		centroid[0] += hull[j][0];
+		centroid[1] += hull[j][1];
+	}
+	centroid[0] = centroid[0] / hull.size();
+	centroid[1] = centroid[1] / hull.size();
+	HullVertexComparator h;
+	h.m_centroid = centroid;
+	std::sort(hull.begin(), hull.end(), h);
+	
+	for (int i=0; i<hull.size(); i++) {
+		printf("Angle: %f\n", atan2(hull[i][1], hull[i][0]));
+	}
+	
+	double max_x = 0.0;
+	double max_y = 0.0;
+	for (size_t i=0; i<hull.size(); i++) {
+		if (hull[i][0] > max_x) max_x = hull[i][0];
+		if (hull[i][1] > max_y) max_y = hull[i][1];
+	}
+
+	printf("Max: %f,%f\n", max_x, max_y);
+	Mat img2((int)max_y+10, (int)max_x+10, CV_8UC1);
+	//circle(img2, Point(centroid[0],centroid[1]), 10, 64000);
+	hull.push_back(hull[0]); // For convinience...
+	for (size_t i=0; i<hull.size()-1; i++) {
+		line(img2, Point((int)hull[i][0],(int)hull[i][1]), Point((int)hull[i+1][0],(int)hull[i+1][1]), 255, 1);
+		//line(img2, Point(0,0), Point((int)hull[i+1][0],(int)hull[i+1][1]), 64000, 1);
+		printf("%f %f\n", hull[i][0], hull[i][1]);
+	}
+
+	outputPicture(img_name, img2);
+
+	return img2;
+
+	// First off, a few config variables
+	int num_angle_buckets = 360;
+	int num_distance_buckets = 640;
+	
+	// Where we're putting the (initial) result
+	Mat img(num_angle_buckets, num_distance_buckets, CV_16UC1);
+	for (int i=0; i<num_angle_buckets; i++) {
+		for (int j=0; j<num_distance_buckets; j++) {
+			img.at<unsigned short>(i,j) = 0;
+		}
+	}
+	
+	//printf("%f => %f\n", 9.0, sqrt(9.0));
+	//exit(0);
+	
+	// Let's get cracking!
+	double max_distance = 0.0;
+	for (size_t i=0; i<hull.size(); i++) {
+		double d = std::sqrt(hull[i][0]*hull[i][0] + hull[i][1]*hull[i][1]);
+		if (d > max_distance) {
+			max_distance = d;
+		}
+		//printf("%f %f\n", d, max_distance);
+	}
+	//printf("max_distance=%f\n", max_distance);
+	unsigned int fullest_bucket = 0;
+	unsigned int last_fullest_bucket = 0;
+	for (size_t i=0; i<hull.size(); i++) {
+		for (int j=0; j<num_angle_buckets; j++) {
+			// Find the shortest vector to the line
+			double angle = DEG2RAD(360.0 / (double)num_angle_buckets * (double)j);
+			double nx = cos(angle);
+			double ny = sin(angle);
+			double dp = hull[i][0]*nx + hull[i][1]*ny;
+			double x = hull[i][0] - dp*nx;
+			double y = hull[i][1] - dp*ny;
+			double dist = sqrt(x*x + y*y);
+			int d_bucket = (int)(dist / max_distance * num_distance_buckets);
+			img.at<unsigned short>(j, d_bucket) += 1;
+			if (img.at<unsigned short>(j, d_bucket) > fullest_bucket) {
+				fullest_bucket = img.at<unsigned short>(j, d_bucket);
+			}
+			if (last_fullest_bucket != fullest_bucket)
+				printf("New max: %i\n", fullest_bucket);
+			last_fullest_bucket = fullest_bucket;
+
+
+#if 0
+			double angle = DEG2RAD(360.0 / (double)num_angle_buckets * (double)j);
+			double d_to_pnt = sqrt(hull[i][0]*hull[i][0] + hull[i][1]*hull[i][1]);
+			double inside_angle = atan2(hull[i][1], hull[i][0]) - angle + DEG2RAD(90);
+			double dist = fabs(d_to_pnt*cos(inside_angle));
+			int d_bucket = (int)(dist / max_distance * num_distance_buckets);
+			img.at<unsigned short>(j, d_bucket) += 1;
+			if (img.at<unsigned short>(j, d_bucket) > fullest_bucket) {
+				fullest_bucket = img.at<unsigned short>(j, d_bucket);
+			}
+			printf("%i,%i => %u\n", j, d_bucket, img.at<unsigned short>(j, d_bucket));
+			if (last_fullest_bucket != fullest_bucket)
+				printf("New max: %i\n", fullest_bucket);
+			last_fullest_bucket = fullest_bucket;
+			if (d_bucket < 0) {
+				printf("angle/dist for pnt %i (d2=%f, <%f,%f>), angle %i: a=%f/d=%f (from cos(%f)) is %i (%i from %f)\n", i, d_to_pnt, hull[i][0], hull[i][1], j, RAD2DEG(angle), dist, RAD2DEG(inside_angle), img.at<unsigned short>(j, dist / max_distance * num_distance_buckets), (int)(dist / max_distance * num_distance_buckets), max_distance);
+			}
+#endif
+		}
+	}
+
+	// For debugging purposes, let's rescale the image
+	printf("Rescaling result with max=%u\n", fullest_bucket);
+	for (int i=0; i<num_angle_buckets; i++) {
+		for (int j=0; j<num_distance_buckets; j++) {
+			if (img.at<unsigned short>(i, j) > 1) {
+				//printf("Ratio: max=%i, %f/%f\n", max, ((double)img.at<unsigned short>(i, j)), 64500.0 / (double)max);
+				img.at<unsigned short>(i, j) = (unsigned short)(((double)img.at<unsigned short>(i, j)) / (double)fullest_bucket * 255);
+			}
+		}
+	}
+
+	// Process it a little bit, to make it a little prettier
+	GaussianBlur(img, img, Size(15, 15), 2);
+
+	outputPicture(img_name, img);
 }
 
 vector<Rectangle3d> findRectanglesInImage(Mat src)
@@ -853,12 +978,12 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 
 		double closest_dps[4] = {90.0, 90.0, 90.0, 90.0};
 		int closest_indices[4] = {-1,-1,-1,-1};
-		double SKIP_DIST = 40.0;
+		double SKIP_DIST = 20.0;
 		int SKIP_CNT = 3;
 		for (int j=0; j<hulls[i].size(); j++) {
-			int index0 = (j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
+			int index0 = j-1;//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
 			int index1 = j;
-			int index2 = (j+SKIP_CNT) % hulls[i].size();
+			int index2 = j+1%hulls[i].size();//(j+SKIP_CNT) % hulls[i].size();
 			Vec2f v1 = normalize(hulls[i][index1] - hulls[i][index2]);
 			Vec2f v2 = normalize(hulls[i][index0] - hulls[i][index1]);
 			double dp = fabs(v1[0]*v2[0] + v1[1]*v2[1]);
@@ -894,6 +1019,17 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			circle(src2, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), 10, Scalar(255,0,255), 2);
 		}
 	}
+	
+	// TODO: Let's pass that to the rectangle guy
+
+	// Let's do that again, but using a haugh transform
+	vector<Mat> contour_images;
+	for (int i=0; i<hulls.size(); i++) {
+		char img_name[2048];
+		snprintf(img_name, 2048, "haugh_%02i", i);
+		contour_images.push_back(myHaughTransform(hulls[i], img_name));
+	}
+
 	outputPicture("cvxhull", src2);
 
 	// Alright, back to the "canonical" algorithm
@@ -904,17 +1040,21 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 
     vector<Vec4i> lines;
 	// Rho (distance), theta, threshold, minlen, maxgap
-    HoughLinesP( dst, lines, 1, CV_PI/3600, 10, 10, 15 );
+    //HoughLinesP( dst, lines, 1, CV_PI/3600, 10, 10, 15 );
+    HoughLinesP( contour_images[0], lines, 1, CV_PI/3600, 10, 10, 15 );
+	Scalar color1(0,0,255);
+	Scalar color2(255,0,0);
+	Scalar colors[2] = {color1, color2};
     for( size_t i = 0; i < lines.size(); i++ )
     {
         line( color_dst, Point(lines[i][0], lines[i][1]),
-            Point(lines[i][2], lines[i][3]), Scalar(0,0,255), 3, 8 );
+            Point(lines[i][2], lines[i][3]), colors[i%2], 3, 8 );
     }
 
 	//outputPicture("lines", color_dst);
 
     // Detect rectangles
-   //printf("We found %lu lines.\n", lines.size());
+    printf("We found %lu lines.\n", lines.size());
     vector<Polygon> rectangles_2d = detectRectangles(lines);
     vector<Rectangle3d> rectangles_3d;
     for (size_t i=0; i<rectangles_2d.size(); i++) {
@@ -924,8 +1064,8 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	  
 	  // Add the edges of the rects to color_dst
 	  Vec4i b = r.get_image_bounds();
-	  printf("%i %i %i %i\n", b[0],b[1],b[2],b[3]);
-	  rectangle(color_dst, Point(b[0], b[1]), Point(b[2], b[3]), Scalar(0,255,0), 1, 8);
+	  printf("%i %i %i %i\n", b[1],b[0],b[2],b[3]);
+	  rectangle(color_dst, Point(b[1], b[0]), Point(b[2], b[3]), Scalar(0,255,0), 1, 8);
     }
 	
 	outputPicture("lines", color_dst);
@@ -937,6 +1077,10 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		printf("Distance to rect %lu is %f, ar=%f\n", i, rectangles_3d[i].centroid_dist(), ar);
       }
     }
+	
+	printf("Exiting at the end of the rectangle processor.\n");
+	exit(0);
+	
 	return rectangles_3d;
 }
 

@@ -208,6 +208,7 @@ Vec4i Polygon::get_bounds(void)
 {
 	int left=1000, right=0, top=0, bottom=1000;
 	for (int i=0; i<m_edges.size(); i++) {
+		printf("Edge: %i %i %i %i\n", m_edges[i][0], m_edges[i][1], m_edges[i][2], m_edges[i][3]);
 		if (m_edges[i][0] < left) left = m_edges[i][0];
 		if (m_edges[i][0] > right) right = m_edges[i][0];
 
@@ -812,16 +813,16 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	for (int i=0; i<canny_output.size().width; i++) {
 		for (int j=0; j<canny_output.size().height; j++) {
 			//printf("%i,%i => %u\n", i, j, canny_output.at<unsigned short>(j,i));
-			if (canny_output.at<unsigned short>(j,i) > 5) {
+			if (canny_output.at<unsigned short>(j,i) > 1) {
 				canny_based_point_cloud.push_back(Vec2f(i,j));
 			}
 		}
 	}
-	//kps2 = canny_based_point_cloud;
+	kps2 = canny_based_point_cloud;
+	printf("I found %u points from the canny.\n", kps2.size());
 
 	for (int i=0; i<kps2.size(); i++) {
-		cv::KeyPoint blob = kps[i];
-		rectangle(src2, cv::Point(blob.pt.x-2, blob.pt.y-2), cv::Point(blob.pt.x+blob.size+2, blob.pt.y+blob.size+2), cv::Scalar(0,255,255), 1, 8);
+		rectangle(src2, cv::Point(kps2[i][0]-2, kps2[i][1]-2), cv::Point(kps2[i][0]+2, kps2[i][1]+2), cv::Scalar(0,255,255), 1, 8);
 	}
 	outputPicture("gftt", src2);
 	
@@ -899,7 +900,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 				}
 			}
 
-			if (min_dist < 80) {
+			if (min_dist < 20) {
 				// Tack it onto cloud
 				for (int k=0; k<point_clouds[j].size(); k++) {
 					cloud.push_back(point_clouds[j][k]);
@@ -1027,7 +1028,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		double SKIP_DIST = 20.0;
 		int SKIP_CNT = 3;
 		for (int j=0; j<hulls[i].size(); j++) {
-			int index0 = j-1;//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
+			int index0 = (j-1+hulls[i].size())%hulls[i].size();//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
 			int index1 = j;
 			int index2 = j+1%hulls[i].size();//(j+SKIP_CNT) % hulls[i].size();
 			Vec2f v1 = normalize(hulls[i][index1] - hulls[i][index2]);
@@ -1041,12 +1042,12 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 						if (m != k) {
 							// Check the distance
 							if (closest_indices[m] > -1) {
-							double dist = vec_dist(hulls[i][index1],hulls[i][closest_indices[m]]);
-							printf("Distance between %i and %i is %f\n", index1, closest_indices[m], dist);
-							if (dist < SKIP_DIST) {
-								is_too_close = true;
-								break;
-							}
+								double dist = vec_dist(hulls[i][index1],hulls[i][closest_indices[m]]);
+								printf("Distance between %i and %i is %f\n", index1, closest_indices[m], dist);
+								if (dist < SKIP_DIST) {
+									is_too_close = true;
+									break;
+								}
 							}
 						}
 					}
@@ -1077,7 +1078,10 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 
 		Vec4i b = r.get_image_bounds();
 		printf("%i %i %i %i\n", b[1],b[0],b[3],b[2]);
-		rectangle(src2, Point(b[1], b[0]), Point(b[3], b[2]), Scalar(0,255,0), 1, 8);
+		rectangle(src2, Point(b[0], b[2]), Point(b[1], b[3]), Scalar(0,255,0), 1, 8);
+		char render_text[2048];
+		snprintf(render_text, 2048, "%i %i %i %i", b[0], b[1], b[2], b[3]);
+		putText(src2, render_text, Point(b[0], b[2]), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255,255,255));
 		new_rects_3d.push_back(r);
 		
 		// Output some information about this point cloud

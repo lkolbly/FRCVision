@@ -20,6 +20,7 @@ public:
 
   // Adds the line to us, attaching the nearest neighbors.
   void add_line(cv::Vec4i line);
+  void fromCorners(std::vector<cv::Vec2i> corners);
 
   int contains(cv::Vec4i line);
 

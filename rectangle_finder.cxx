@@ -64,6 +64,13 @@ vector<Vec4i> Polygon::get_edges(void) {
 	return m_edges;
 }
 
+void Polygon::fromCorners(std::vector<cv::Vec2i> corners)
+{
+	for (int i=0; i<corners.size(); i++) {
+		m_edges.push_back(Vec4i(corners[i][0], corners[i][1], corners[(i+1)%corners.size()][0], corners[(i+1)%corners.size()][1]));
+	}
+}
+
 double Polygon::difference(Polygon *other)
 {
   double sum = 0.0;
@@ -454,10 +461,13 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
   double last_inaccuracy = 0.0;
   while (1) {
     double sum = find_squareness(coefs, dist);
-    //printf("Inaccuracy: %f (k=%f)\n", sum, k);
+    printf("Inaccuracy: %f (k=%f)\n", sum, k);
     if (last_inaccuracy-sum < 0.001) {
       break;
     }
+	if (k < 0.000001) {
+		break;
+	}
     //usleep(1000000);
 
     // Figet with the distances, and go with the optimal one.
@@ -783,14 +793,49 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	vector<Vec2f> kps2;
     blobDetect->detect(src, kps);
 	for (int i=0; i<kps.size(); i++) {
-        cv::KeyPoint blob = kps[i];
-        rectangle(src2, cv::Point(blob.pt.x-2, blob.pt.y-2), cv::Point(blob.pt.x+blob.size+2, blob.pt.y+blob.size+2), cv::Scalar(0,255,255), 1, 8);
+        //cv::KeyPoint blob = kps[i];
+        //rectangle(src2, cv::Point(blob.pt.x-2, blob.pt.y-2), cv::Point(blob.pt.x+blob.size+2, blob.pt.y+blob.size+2), cv::Scalar(0,255,255), 1, 8);
 		Vec2f k;
-		k[0] = blob.pt.x;
-		k[1] = blob.pt.y;
+		k[0] = kps[i].pt.x;
+		k[1] = kps[i].pt.y;
 		kps2.push_back(k);
     }
+	
+	// Canny it!
+	Mat canny_output(src.size(), src.type());
+	Canny(src, canny_output, 1, 2);
+	outputPicture("canny", canny_output);
+	canny_output.convertTo(canny_output, CV_16UC1);
+	
+	// Take the canny, make up a bunch of points on it, and then call it a point cloud.
+	vector<Vec2f> canny_based_point_cloud;
+	for (int i=0; i<canny_output.size().width; i++) {
+		for (int j=0; j<canny_output.size().height; j++) {
+			//printf("%i,%i => %u\n", i, j, canny_output.at<unsigned short>(j,i));
+			if (canny_output.at<unsigned short>(j,i) > 5) {
+				canny_based_point_cloud.push_back(Vec2f(i,j));
+			}
+		}
+	}
+	//kps2 = canny_based_point_cloud;
+
+	for (int i=0; i<kps2.size(); i++) {
+		cv::KeyPoint blob = kps[i];
+		rectangle(src2, cv::Point(blob.pt.x-2, blob.pt.y-2), cv::Point(blob.pt.x+blob.size+2, blob.pt.y+blob.size+2), cv::Scalar(0,255,255), 1, 8);
+	}
 	outputPicture("gftt", src2);
+	
+	// Test of cornerHarris
+	Mat harris_output(src2.size(), CV_32FC1);
+	Mat harris2;
+	cvtColor(src2, harris2, CV_BGR2GRAY);
+	preCornerDetect(harris2, harris_output, 3);
+	outputPicture("harris", harris_output);
+
+	Mat dilated_corners;
+	dilate(harris_output, dilated_corners, Mat(), Point(0,0));
+	Mat corner_mask = harris_output == dilated_corners;
+	outputPicture("corner", corner_mask);
 	
 	// Get rid of all blobs that are far away
 	vector<vector<Vec2f> > point_clouds;
@@ -968,6 +1013,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	}
 
 	// Find the rectangle edges for each hull...
+	vector<Rectangle3d> new_rects_3d;
 	for (int i=0; i<hulls.size(); i++) {
 		if (hulls[i].size() < 4) {
 			continue;
@@ -1018,9 +1064,34 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			printf("Closest DPS %i: %f\n", j, closest_dps[j]);
 			circle(src2, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), 10, Scalar(255,0,255), 2);
 		}
+		
+		// Pass them into the Rectangle3D framework
+		Polygon poly;
+		vector<Vec2i> corners;
+		for (int j=0; j<4; j++) {
+			corners.push_back(Vec2i(hulls[i][closest_indices[j]][0],hulls[i][closest_indices[j]][1]));
+		}
+		poly.fromCorners(corners);
+		Rectangle3d r(poly);
+		r.solve((double)src.size().width, (double)src.size().height, 60.0,60.0, 7.0,2.75);
+
+		Vec4i b = r.get_image_bounds();
+		printf("%i %i %i %i\n", b[1],b[0],b[3],b[2]);
+		rectangle(src2, Point(b[1], b[0]), Point(b[3], b[2]), Scalar(0,255,0), 1, 8);
+		new_rects_3d.push_back(r);
+		
+		// Output some information about this point cloud
+		char bufname[2048];
+		snprintf(bufname, 2048, "pc_%02i", i);
+		Mat pc_img;
+		for (int j=0; j<hulls[i].size(); j++) {
+			circle(src2, Point(hulls[i][j][0], hulls[i][j][1]), 5, Scalar(255,0,255), 2);
+		}
+		outputPicture(bufname, pc_img);
 	}
-	
-	// TODO: Let's pass that to the rectangle guy
+	outputPicture("newalg", src2);
+	return new_rects_3d;
+	//printf("EXITING... Press ctrl-C\n"); while(1);
 
 	// Let's do that again, but using a haugh transform
 	vector<Mat> contour_images;

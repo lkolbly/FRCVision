@@ -15,8 +15,8 @@ class MyRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         #choice = TEST_SET_COUNT
         #TEST_SET_COUNT += 1
         #TEST_SET_COUNT = TEST_SET_COUNT % len(files)
-        #data = open("%s\\%s"%(TEST_SET_DIR,files[choice]), "rb").read()
-        data = open("%s\\%s"%(TEST_SET_DIR,"image.cgi.24"), "rb").read()
+        data = open("%s\\%s"%(TEST_SET_DIR,files[choice]), "rb").read()
+        #data = open("%s\\%s"%(TEST_SET_DIR,"image.cgi.24"), "rb").read()
         print choice, files[choice], len(data)
         self.wfile.write(data)
         pass

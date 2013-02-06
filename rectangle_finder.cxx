@@ -1028,9 +1028,9 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		double SKIP_DIST = 20.0;
 		int SKIP_CNT = 3;
 		for (int j=0; j<hulls[i].size(); j++) {
-			int index0 = (j-1+hulls[i].size())%hulls[i].size();//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
+			int index0 = (j-SKIP_CNT+hulls[i].size())%hulls[i].size();//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
 			int index1 = j;
-			int index2 = j+1%hulls[i].size();//(j+SKIP_CNT) % hulls[i].size();
+			int index2 = (j+SKIP_CNT)%hulls[i].size();//(j+SKIP_CNT) % hulls[i].size();
 			Vec2f v1 = normalize(hulls[i][index1] - hulls[i][index2]);
 			Vec2f v2 = normalize(hulls[i][index0] - hulls[i][index1]);
 			double dp = fabs(v1[0]*v2[0] + v1[1]*v2[1]);

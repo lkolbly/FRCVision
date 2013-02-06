@@ -855,7 +855,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 				double dist = sqrt(diff[0]*diff[0] + diff[1]*diff[1]);
 				if (dist < min_dist) min_dist = dist;
 			}
-			if (min_dist < 40) {
+			if (min_dist < 20) {
 				// Add it
 				point_clouds[j].push_back(kps2[i]);
 				did_add = true;
@@ -1066,6 +1066,17 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			circle(src2, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), 10, Scalar(255,0,255), 2);
 		}
 		
+		// Check to make sure that we actually have four points
+		bool is_valid_rect = true;
+		for (int j=0; j<4; j++) {
+			if (closest_dps[j] > 3.0) {
+				// Oh no!
+				is_valid_rect = false;
+				break;
+			}
+		}
+		if (!is_valid_rect) continue; // Onto the next point cloud!
+		
 		// Pass them into the Rectangle3D framework
 		Polygon poly;
 		vector<Vec2i> corners;
@@ -1077,11 +1088,21 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		r.solve((double)src.size().width, (double)src.size().height, 60.0,60.0, 7.0,2.75);
 
 		Vec4i b = r.get_image_bounds();
+
+		// Check to make sure that "0" isn't in the bounds.
+		// It's naive, but it'll also remove many false-positives from the test cases.
+		for (int j=0; j<4; j++) {
+			if (b[j] <= 0) {
+				is_valid_rect = false;
+			}
+		}
+		if (!is_valid_rect) continue;
+
 		printf("%i %i %i %i\n", b[1],b[0],b[3],b[2]);
 		rectangle(src2, Point(b[0], b[2]), Point(b[1], b[3]), Scalar(0,255,0), 1, 8);
 		char render_text[2048];
 		snprintf(render_text, 2048, "%i %i %i %i", b[0], b[1], b[2], b[3]);
-		putText(src2, render_text, Point(b[0], b[2]), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255,255,255));
+		putText(src2, render_text, Point(b[1], b[3]), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255,255,255));
 		new_rects_3d.push_back(r);
 		
 		// Output some information about this point cloud

@@ -21,13 +21,13 @@ unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 	short ncontours = contours.size();
 	memcpy(data+2, &ncontours, 2);
 	
-	for (int i=0; i<contours.size(); i++) {
+	for (size_t i=0; i<contours.size(); i++) {
 		//printf("%i: %i has %i points\n", i, hierarchy[i][0], contours[i].size());
 		data = (char*)realloc(data, offset+5+4*contours[i].size());
 		short npoints = contours[i].size();
 		memcpy(data+offset, &npoints, 2);
 		offset+=2;
-		for (int j=0; j<contours[i].size(); j++) {
+		for (size_t j=0; j<contours[i].size(); j++) {
 			//printf(" - %i/%i: %i %i\n", i,j, contours[i][j].x, contours[i][j].y);
 			short x = contours[i][j].x;
 			short y = contours[i][j].y;
@@ -102,7 +102,7 @@ processedImagery_t processFile(const char *in_fname)
 	}
 #else
 	vector<Rectangle3d> rectangles = findRectanglesInImage(v.img_data);
-	for (int i=0; i<rectangles.size(); i++) {
+	for (size_t i=0; i<rectangles.size(); i++) {
 		Rectangle3d r = rectangles[i];
 		Target t;
 		t.centroid_distance = r.centroid_dist();
@@ -133,16 +133,16 @@ void *processingMain(void *arg)
 		if (td->processing_result.uid != td->collection_cfg.uid) {
 			//printf("%i %i\n", td->processing_result.uid, td->collection_cfg.uid);
 			//printf("%i\n", td->processing_result.uid);
-			Sleep(20);
+			//Sleep(20);
 			CopyFile("storage-tmp.jpg", "processing-tmp.jpg", false); // Copy out the file
 			//printf("Moved file to processing-tmp.jpg\n");
 			//td->has_processed_image = 1;
 			pthread_mutex_unlock(&td->image_file_lock);
 
 			//printf("Processing file.\n");
-			Sleep(50);
+			//Sleep(50);
 			processedImagery_t processed_imagery = processFile("processing-tmp.jpg");
-			Sleep(50);
+			//Sleep(50);
 
 			pthread_mutex_lock(&td->processed_data_lock);
 			processed_imagery.uid = td->collection_cfg.uid;

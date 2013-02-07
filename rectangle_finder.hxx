@@ -4,12 +4,8 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
-//using namespace std;
 using namespace cv;
 
-//class Polygon;
-
-#if 1
 class Polygon {
 public:
   std::vector<Vec4i> m_edges;
@@ -37,7 +33,6 @@ public:
 
   std::vector<cv::Vec4i> get_edges(void);
 };
-#endif
 
 class Rectangle3d {
 private:

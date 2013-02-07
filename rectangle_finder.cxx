@@ -15,6 +15,9 @@ by changing "#if 1" to "#if 0" and back */
 #define DEG2RAD(x) ((x)/57.2957795)
 #define RAD2DEG(x) ((x)*57.2957795)
 
+#define POLYGON_DEBUG 0
+#define ENABLE_DEBUG_IMAGES 0
+
 using namespace cv;
 
 double min(double a, double b)
@@ -34,39 +37,13 @@ double vec_dist(Vec2f v1, Vec2f v2)
 	return pnt_dist(v1[0], v1[1], v2[0], v2[1]);
 }
 
-#if 0
-class Polygon {
-public:
-  vector<Vec4i> m_edges;
-  Vec2i m_endpoints[2];
-
-  // Finds the min. distance between our endpoints and the line
-  double dist_to_line(Vec4i line);
-
-  // Adds the line to us, attaching the nearest neighbors.
-  void add_line(Vec4i line);
-
-  int contains(Vec4i line);
-
-  // Find all the corners of this polygon
-  vector<Vec2i> find_corners(void);
-
-  // Find the RMS difference from another polygon
-  double difference(Polygon *other);
-
-  int should_add_line(Vec4i line);
-
-  vector<Vec4i> get_edges(void);
-};
-#endif
-
 vector<Vec4i> Polygon::get_edges(void) {
 	return m_edges;
 }
 
 void Polygon::fromCorners(std::vector<cv::Vec2i> corners)
 {
-	for (int i=0; i<corners.size(); i++) {
+	for (size_t i=0; i<corners.size(); i++) {
 		m_edges.push_back(Vec4i(corners[i][0], corners[i][1], corners[(i+1)%corners.size()][0], corners[(i+1)%corners.size()][1]));
 	}
 }
@@ -117,7 +94,7 @@ void Polygon::add_line(Vec4i line)
   double d2 = pnt_dist(line[0], line[1], m_endpoints[1][0], m_endpoints[1][1]);
   double d3 = pnt_dist(line[2], line[3], m_endpoints[0][0], m_endpoints[0][1]);
   double d4 = pnt_dist(line[2], line[3], m_endpoints[1][0], m_endpoints[1][1]);
-  int m = min_index(d1,d2,d3,d4);//min(min(d1, d2), min(d3, d4));
+  int m = min_index(d1,d2,d3,d4);
   if (m == 1) {
     Vec4i l2;
     l2[2] = line[0];
@@ -147,7 +124,6 @@ int Polygon::contains(Vec4i line)
 {
   for (size_t i=0; i<m_edges.size(); i++) {
     Vec4i l = m_edges[i];
-    //printf("%i %i %i %i\n", l[0], line[0], l[2], line[2]);
     if (l[0] == line[0] && l[2] == line[2]) {
       return 1;
     }
@@ -207,8 +183,10 @@ int Polygon::should_add_line(Vec4i line)
 Vec4i Polygon::get_bounds(void)
 {
 	int left=1000, right=0, top=0, bottom=1000;
-	for (int i=0; i<m_edges.size(); i++) {
+	for (size_t i=0; i<m_edges.size(); i++) {
+#if POLYGON_DEBUG
 		printf("Edge: %i %i %i %i\n", m_edges[i][0], m_edges[i][1], m_edges[i][2], m_edges[i][3]);
+#endif
 		if (m_edges[i][0] < left) left = m_edges[i][0];
 		if (m_edges[i][0] > right) right = m_edges[i][0];
 
@@ -226,110 +204,46 @@ Vec4i Polygon::get_bounds(void)
 
 vector<Polygon> detectRectangles(vector<Vec4i> lines)
 {
-  // We iterate through every line. For the beginning and ending points,
-  // we find nearby lines, and generate shapes that match.
-  // After discarding shapes that don't have 4 sides, we are left with
-  // only quadrangles.
-  vector<Polygon> rectangles;
-  //printf("We're detecting rectangles in %lu lines.\n", lines.size());
-  for (size_t i=0; i<lines.size(); i++) {
-    Polygon p;
-    p.add_line(lines[i]);
-    for (size_t j=0; j<lines.size(); j++) {
-      if (!p.contains(lines[j])) {
-	//double d = p.dist_to_line(lines[j]);
-	//printf("%i (%i,%i,%i,%i) has distance %f\n", j, lines[j][0], lines[j][1], lines[j][2], lines[j][3], d);
-	//if (d < 5) {
-	if (p.should_add_line(lines[j])) {
-	  p.add_line(lines[j]);
-	  j = 0;
+	// We iterate through every line. For the beginning and ending points,
+	// we find nearby lines, and generate shapes that match.
+	// After discarding shapes that don't have 4 sides, we are left with
+	// only quadrangles.
+	vector<Polygon> rectangles;
+	//printf("We're detecting rectangles in %lu lines.\n", lines.size());
+	for (size_t i=0; i<lines.size(); i++) {
+		Polygon p;
+		p.add_line(lines[i]);
+		for (size_t j=0; j<lines.size(); j++) {
+			if (!p.contains(lines[j])) {
+				if (p.should_add_line(lines[j])) {
+					p.add_line(lines[j]);
+					j = 0;
+				}
+			}
+		}
+		if (p.m_edges.size() == 4) {
+			rectangles.push_back(p);
+		}
 	}
 
-#if 0 // We don't actually do this check. But we should.
-	// Check to see if the endpoint is nearby one of our endpoint lines.
-	// If so, then we should shorten said endpoint line.
-	double d=dist_pnt_to_line(Vec2i(lines[j][0], lines[j][1]), m_edges[0]);
-	if (d < 5) {
-	  // Add it!
-	  m_edges[0][0] = lines[j][0];
-	  m_edges[0][1] = lines[j][1];
+	// Now collapse all of the rectangles
+	vector<Polygon> unique_rectangles;
+	for (size_t i=0; i<rectangles.size(); i++) {
+		double min_diff = 10000.0;
+		for (int j=i-1; j>=0; j--) {
+			double diff = rectangles[i].difference(&rectangles[j]);
+			if (diff < min_diff) {
+				min_diff = diff;
+			}
+		}
+
+		// If we're the first one like this one that we've seen...
+		if (min_diff > 2.0) {
+			unique_rectangles.push_back(rectangles[i]);
+		}
 	}
-#endif
-      }
-    }
-    //printf("p has %lu edges.\n", p.m_edges.size());
-    if (p.m_edges.size() == 4) {
-      // Find the corners
-      vector<Vec2i> corners = p.find_corners();
-      //printf(" - ");
-      for (size_t j=0; j<corners.size(); j++) {
-	//printf("%i,%i ", corners[j][0], corners[j][1]);
-      }
-      //printf("\n");
-
-      rectangles.push_back(p);
-    }
-  }
-
-  // Now collapse all of the rectangles
-  vector<Polygon> unique_rectangles;
-  for (size_t i=0; i<rectangles.size(); i++) {
-    double min_diff = 10000.0;
-    for (int j=i-1; j>=0; j--) {
-	double diff = rectangles[i].difference(&rectangles[j]);
-	if (diff < min_diff) {
-	  min_diff = diff;
-	}
-	//printf("%lu %i %f\n", i, j, diff);
-    }
-
-    // If we're the first one like this one that we've seen...
-   //printf("%lu %f\n", i, min_diff);
-    if (min_diff > 2.0) {
-      unique_rectangles.push_back(rectangles[i]);
-    }
-  }
-
-  // Print out the 'unique' rectangles
- //printf("Printing out unique rectangles...\n");
-  for (size_t i=0; i<unique_rectangles.size(); i++) {
-    vector<Vec2i> corners = unique_rectangles[i].find_corners();
-   //printf(" - ");
-    for (size_t j=0; j<corners.size(); j++) {
-     //printf("%i,%i ", corners[j][0], corners[j][1]);
-    }
-   //printf("\n");
-  }
-
-  return unique_rectangles;
+	return unique_rectangles;
 }
-
-#if 0
-class Rectangle3d {
-private:
-  Polygon m_p;
-  Vec2f m_corners[4];
-  double m_dist[4];
-  Vec2f m_coefs[4];
-
-public:
-  Rectangle3d(Polygon p);
-  void solve(double w, double h, double fovx, double fovy,
-	     double known_w, double known_h);
-  Vec2f coef_from_point(double x, double y, double w, double h,
-			double fovx, double fovy);
-  double find_squareness(Vec2f *coefs, double *dist);
-
-  vector<Vec3f> get_points(double *dist);
-  vector<Vec3f> get_points(void);
-
-  // Returns the distance to the geometric mean
-  double distance(void);
-  double centroid_dist(void);
-
-  double aspect_ratio(void);
-};
-#endif
 
 Rectangle3d::Rectangle3d(Polygon p)
 {
@@ -362,8 +276,6 @@ Vec3f my_normalize(Vec3f v)
 // Find the angle at b by a and c.
 double angle3d(Vec3f a, Vec3f b, Vec3f c)
 {
-  //Vec3f v1 = //my_normalize(a - b);
-  //Vec3f v2 = //my_normalize(c - b);
   Vec3f v1;
   Vec3f v2;
   v1[0] = a[0] - b[0];
@@ -406,15 +318,6 @@ vector<Vec3f> Rectangle3d::get_points(void)
 double Rectangle3d::find_squareness(Vec2f *coefs, double *dist)
 {
   // Find the current trial points
-#if 0
-  Vec3f pnts[4];
-  for (int i=0; i<4; i++) {
-    if (dist[i] < 0.0) dist[i] = 0.0;
-    pnts[i][0] = coefs[i][0] * dist[i];
-    pnts[i][1] = coefs[i][1] * dist[i];
-    pnts[i][2] = dist[i];
-  }
-#endif
   vector<Vec3f> pnts = get_points(dist);
 
   // Find the current angles
@@ -428,137 +331,110 @@ double Rectangle3d::find_squareness(Vec2f *coefs, double *dist)
   double sum = 0.0;
   for (int i=0; i<4; i++) {
     sum += (a[i]-90.0)*(a[i]-90.0);
-    //printf("%f => %f\n", dist[i], a[i]);
-  }
-  for (int i=0; i<4; i++) {
-    //printf("%f,%f,%f\n", pnts[i][0], pnts[i][1], pnts[i][2]);
   }
   sum = sum / 4.0;
-  //printf("Mean Square inaccuracy = %f\n", sum);
 
   return sum;
 }
 
 void Rectangle3d::solve(double w, double h, double fovx, double fovy,
-			double known_w, double known_h)
+						double known_w, double known_h)
 {
-  m_camera_FOV[0] = fovx;
-  m_camera_FOV[1] = fovy;
-  //std::cout << "Solving a rectangle...";
-  double k = 0.01; // This is used in the iterative solver.
+	m_camera_FOV[0] = fovx;
+	m_camera_FOV[1] = fovy;
+	//std::cout << "Solving a rectangle...";
+	double k = 0.01; // This is used in the iterative solver.
 
-  // Find the four lines that extend to the corners from the camera
-  Vec2f coefs[4];
-  for (int i=0; i<4; i++) {
-    m_coefs[i] = coef_from_point((double)m_corners[i][0], (double)m_corners[i][1],
-			       w, h, fovx, fovy);
-  }
-
-  // Solve to figure out the distance along said lines to make the angles 90deg
-  // Yes, it's an iterative solver. Sorry, Ms. Harrelson.
-  double dist[4];
-  dist[0] = 1.0; // Fix one of the distances for now.
-  dist[1] = dist[2] = dist[3] = 1.0;
-  double last_inaccuracy = 0.0;
-  while (1) {
-    double sum = find_squareness(coefs, dist);
-    printf("Inaccuracy: %f (k=%f)\n", sum, k);
-    if (last_inaccuracy-sum < 0.001) {
-      break;
-    }
-	if (k < 0.000001) {
-		break;
+	// Find the four lines that extend to the corners from the camera
+	Vec2f coefs[4];
+	for (int i=0; i<4; i++) {
+	m_coefs[i] = coef_from_point((double)m_corners[i][0], (double)m_corners[i][1],
+	w, h, fovx, fovy);
 	}
-    //usleep(1000000);
 
-    // Figet with the distances, and go with the optimal one.
-    int did_change = 0;
-    for (int i=0; i<4; i++) {
-      double orig = dist[i];
-      dist[i] = orig + k;
-      double incr = find_squareness(coefs, dist);
-      dist[i] = orig - k;
-      double decr = find_squareness(coefs, dist);
-      dist[i] = orig;
-      if (sum-incr>sum-decr && incr<sum) {
-	dist[i] += k;
-	sum = incr;
-	did_change = 1;
-      } else if (decr < sum) {
-	dist[i] -= k;
-	sum = decr;
-	did_change = 1;
-      }
-    }
-    if (!did_change) {
-      k = k/2;
-    }
+	// Solve to figure out the distance along said lines to make the angles 90deg
+	// Yes, it's an iterative solver. Sorry, Ms. Harrelson.
+	double dist[4];
+	dist[0] = 1.0; // Fix one of the distances for now.
+	dist[1] = dist[2] = dist[3] = 1.0;
+	double last_inaccuracy = 0.0;
+	while (1) {
+		double sum = find_squareness(coefs, dist);
+		printf("Inaccuracy: %f (k=%f)\n", sum, k);
+		if (last_inaccuracy-sum < 0.001) {
+			break;
+		}
+		if (k < 0.000001) {
+			break;
+		}
 
-    // Eventually we break, when we're close enough...
-    if (sum < 0.01) {
-      break;
-    }
+		// Figet with the distances, and go with the optimal one.
+		int did_change = 0;
+		for (int i=0; i<4; i++) {
+			double orig = dist[i];
+			dist[i] = orig + k;
+			double incr = find_squareness(coefs, dist);
+			dist[i] = orig - k;
+			double decr = find_squareness(coefs, dist);
+			dist[i] = orig;
+			if (sum-incr>sum-decr && incr<sum) {
+				dist[i] += k;
+				sum = incr;
+				did_change = 1;
+			} else if (decr < sum) {
+				dist[i] -= k;
+				sum = decr;
+				did_change = 1;
+			}
+		}
+		if (!did_change) {
+			k = k/2;
+		}
 
-    // Adjust the distances based on the current angles
+		// Eventually we break, when we're close enough...
+		if (sum < 0.01) {
+			break;
+		}
+	}
+
+	// Copy out the distances.
+	for (int i=0; i<4; i++) {
+		m_dist[i] = dist[i];
+	}
+
+	// Now we can scale everyone to match the width to the known width
+	// We'll assume the 'width' is the 'longest' edge.
+	// Find the longest edge
+	double est_w = 0.0;
+	vector<Vec3f> pnts = get_points();
+	for (int i=0; i<4; i++) {
+		double d = dist3d(pnts[i], pnts[(i+1)%3]);
+		if (d > est_w) {
+			est_w = d;
+		}
+	}
+
+	// Scale all of the distances by the needed correction factor
+	double factor = known_w / est_w;
+	for (int i=0; i<4; i++) {
+		m_dist[i] *= factor;
+	}
+
+	// Some debugging info
+	//printf("Adjusted distances to %f,%f,%f,%f\n", m_dist[0], m_dist[1], m_dist[2], m_dist[3]);
 #if 0
-    double overall_diff = 0.0;
-    if (a[0] > 90.0) {
-      overall_diff = k*(a[0]-90.0)/2.0;
-    } else {
-      overall_diff = -k*(90.0-a[0])/2.0;
-    }
-    for (int i=1; i<4; i++) { // Remember: point 0 is fixed.
-     //printf("%f => %f => %f\n", dist[i], a[i], k*(a[i]-90.0)+overall_diff);
-      if (a[i] > 90.0) {
-	dist[i] -= k*(a[i]-90.0);
-      } else {
-	dist[i] += k*(90.0-a[i]);
-      }
-      dist[i] += overall_diff;
-    }
-   //printf("\n");
+	double est_w = 0.0;
+	double est_h = 0.0;
+	vector<Vec3f> pnts = get_points();
+	for (int i=0; i<4; i++) {
+		double d = dist3d(pnts[i], pnts[(i+1)%3]);
+		if (d > est_w) {
+			est_w = d;
+			est_h = dist3d(pnts[(i+1)%3], pnts[(i+2)%3]);
+		}
+	}
 #endif
-  }
-
-  // Copy out the distances.
-  for (int i=0; i<4; i++)
-    m_dist[i] = dist[i];
-
-  // Now we can scale everyone to match the width to the known width
-  // We'll assume the 'width' is the 'longest' edge.
-  while (1) {
-    // Find the longest edge
-    double est_w = 0.0;
-    vector<Vec3f> pnts = get_points();
-    for (int i=0; i<4; i++) {
-      double d = dist3d(pnts[i], pnts[(i+1)%3]);
-      if (d > est_w) {
-	est_w = d;
-      }
-    }
-
-    // Scale all of the distances by the needed correction factor
-    double factor = known_w / est_w;
-    for (int i=0; i<4; i++) {
-      m_dist[i] *= factor;
-    }
-
-    break;
-  }
-
-  // Some debugging info
- //printf("Adjusted distances to %f,%f,%f,%f\n", m_dist[0], m_dist[1], m_dist[2], m_dist[3]);
-    double est_w = 0.0;
-    double est_h = 0.0;
-    vector<Vec3f> pnts = get_points();
-    for (int i=0; i<4; i++) {
-      double d = dist3d(pnts[i], pnts[(i+1)%3]);
-      if (d > est_w) {
-	est_w = d;
-	est_h = dist3d(pnts[(i+1)%3], pnts[(i+2)%3]);
-      }
-    }
-   //printf("Final estimated size: %fx%f, ar=%f\n", est_w, est_h, est_w/est_h);
+//printf("Final estimated size: %fx%f, ar=%f\n", est_w, est_h, est_w/est_h);
 }
 
 double Rectangle3d::aspect_ratio(void)
@@ -649,7 +525,7 @@ Mat myHaughTransform(vector<Vec2f> hull, const char *img_name)
 	printf("Haugh transforming a hull of size %i\n", hull.size());
 
 	Vec2f centroid(0,0);
-	for (int j=0; j<hull.size(); j++) {
+	for (size_t j=0; j<hull.size(); j++) {
 		centroid[0] += hull[j][0];
 		centroid[1] += hull[j][1];
 	}
@@ -659,7 +535,7 @@ Mat myHaughTransform(vector<Vec2f> hull, const char *img_name)
 	h.m_centroid = centroid;
 	std::sort(hull.begin(), hull.end(), h);
 	
-	for (int i=0; i<hull.size(); i++) {
+	for (size_t i=0; i<hull.size(); i++) {
 		printf("Angle: %f\n", atan2(hull[i][1], hull[i][0]));
 	}
 	
@@ -683,95 +559,10 @@ Mat myHaughTransform(vector<Vec2f> hull, const char *img_name)
 	outputPicture(img_name, img2);
 
 	return img2;
-
-	// First off, a few config variables
-	int num_angle_buckets = 360;
-	int num_distance_buckets = 640;
-	
-	// Where we're putting the (initial) result
-	Mat img(num_angle_buckets, num_distance_buckets, CV_16UC1);
-	for (int i=0; i<num_angle_buckets; i++) {
-		for (int j=0; j<num_distance_buckets; j++) {
-			img.at<unsigned short>(i,j) = 0;
-		}
-	}
-	
-	//printf("%f => %f\n", 9.0, sqrt(9.0));
-	//exit(0);
-	
-	// Let's get cracking!
-	double max_distance = 0.0;
-	for (size_t i=0; i<hull.size(); i++) {
-		double d = std::sqrt(hull[i][0]*hull[i][0] + hull[i][1]*hull[i][1]);
-		if (d > max_distance) {
-			max_distance = d;
-		}
-		//printf("%f %f\n", d, max_distance);
-	}
-	//printf("max_distance=%f\n", max_distance);
-	unsigned int fullest_bucket = 0;
-	unsigned int last_fullest_bucket = 0;
-	for (size_t i=0; i<hull.size(); i++) {
-		for (int j=0; j<num_angle_buckets; j++) {
-			// Find the shortest vector to the line
-			double angle = DEG2RAD(360.0 / (double)num_angle_buckets * (double)j);
-			double nx = cos(angle);
-			double ny = sin(angle);
-			double dp = hull[i][0]*nx + hull[i][1]*ny;
-			double x = hull[i][0] - dp*nx;
-			double y = hull[i][1] - dp*ny;
-			double dist = sqrt(x*x + y*y);
-			int d_bucket = (int)(dist / max_distance * num_distance_buckets);
-			img.at<unsigned short>(j, d_bucket) += 1;
-			if (img.at<unsigned short>(j, d_bucket) > fullest_bucket) {
-				fullest_bucket = img.at<unsigned short>(j, d_bucket);
-			}
-			if (last_fullest_bucket != fullest_bucket)
-				printf("New max: %i\n", fullest_bucket);
-			last_fullest_bucket = fullest_bucket;
-
-
-#if 0
-			double angle = DEG2RAD(360.0 / (double)num_angle_buckets * (double)j);
-			double d_to_pnt = sqrt(hull[i][0]*hull[i][0] + hull[i][1]*hull[i][1]);
-			double inside_angle = atan2(hull[i][1], hull[i][0]) - angle + DEG2RAD(90);
-			double dist = fabs(d_to_pnt*cos(inside_angle));
-			int d_bucket = (int)(dist / max_distance * num_distance_buckets);
-			img.at<unsigned short>(j, d_bucket) += 1;
-			if (img.at<unsigned short>(j, d_bucket) > fullest_bucket) {
-				fullest_bucket = img.at<unsigned short>(j, d_bucket);
-			}
-			printf("%i,%i => %u\n", j, d_bucket, img.at<unsigned short>(j, d_bucket));
-			if (last_fullest_bucket != fullest_bucket)
-				printf("New max: %i\n", fullest_bucket);
-			last_fullest_bucket = fullest_bucket;
-			if (d_bucket < 0) {
-				printf("angle/dist for pnt %i (d2=%f, <%f,%f>), angle %i: a=%f/d=%f (from cos(%f)) is %i (%i from %f)\n", i, d_to_pnt, hull[i][0], hull[i][1], j, RAD2DEG(angle), dist, RAD2DEG(inside_angle), img.at<unsigned short>(j, dist / max_distance * num_distance_buckets), (int)(dist / max_distance * num_distance_buckets), max_distance);
-			}
-#endif
-		}
-	}
-
-	// For debugging purposes, let's rescale the image
-	printf("Rescaling result with max=%u\n", fullest_bucket);
-	for (int i=0; i<num_angle_buckets; i++) {
-		for (int j=0; j<num_distance_buckets; j++) {
-			if (img.at<unsigned short>(i, j) > 1) {
-				//printf("Ratio: max=%i, %f/%f\n", max, ((double)img.at<unsigned short>(i, j)), 64500.0 / (double)max);
-				img.at<unsigned short>(i, j) = (unsigned short)(((double)img.at<unsigned short>(i, j)) / (double)fullest_bucket * 255);
-			}
-		}
-	}
-
-	// Process it a little bit, to make it a little prettier
-	GaussianBlur(img, img, Size(15, 15), 2);
-
-	outputPicture(img_name, img);
 }
 
 vector<Rectangle3d> findRectanglesInImage(Mat src)
 {
-	
 	rectangle_Finder_Debug_Counter++;
     Mat dst, color_dst;
 	
@@ -789,11 +580,12 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	Mat src2;
 	src.copyTo(src2);
 	cvtColor(src2, src2, CV_GRAY2BGR);
+	vector<Vec2f> kps2;
+#if 0
     cv::FeatureDetector* blobDetect = new cv::GoodFeaturesToTrackDetector(1000,0.1,1.0,3,false,0.04);
 	std::vector<cv::KeyPoint> kps;
-	vector<Vec2f> kps2;
     blobDetect->detect(src, kps);
-	for (int i=0; i<kps.size(); i++) {
+	for (size_t i=0; i<kps.size(); i++) {
         //cv::KeyPoint blob = kps[i];
         //rectangle(src2, cv::Point(blob.pt.x-2, blob.pt.y-2), cv::Point(blob.pt.x+blob.size+2, blob.pt.y+blob.size+2), cv::Scalar(0,255,255), 1, 8);
 		Vec2f k;
@@ -801,52 +593,60 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		k[1] = kps[i].pt.y;
 		kps2.push_back(k);
     }
+#endif
 	
 	// Canny it!
 	Mat canny_output(src.size(), src.type());
 	Canny(src, canny_output, 1, 2);
+#if ENABLE_DEBUG_IMAGES
 	outputPicture("canny", canny_output);
+#endif
 	canny_output.convertTo(canny_output, CV_16UC1);
 	
 	// Take the canny, make up a bunch of points on it, and then call it a point cloud.
 	vector<Vec2f> canny_based_point_cloud;
 	for (int i=0; i<canny_output.size().width; i++) {
 		for (int j=0; j<canny_output.size().height; j++) {
-			//printf("%i,%i => %u\n", i, j, canny_output.at<unsigned short>(j,i));
 			if (canny_output.at<unsigned short>(j,i) > 1) {
 				canny_based_point_cloud.push_back(Vec2f(i,j));
 			}
 		}
 	}
 	kps2 = canny_based_point_cloud;
-	printf("I found %u points from the canny.\n", kps2.size());
 
-	for (int i=0; i<kps2.size(); i++) {
+#if ENABLE_DEBUG_IMAGES
+	printf("I found %u points from the canny.\n", kps2.size());
+	for (size_t i=0; i<kps2.size(); i++) {
 		rectangle(src2, cv::Point(kps2[i][0]-2, kps2[i][1]-2), cv::Point(kps2[i][0]+2, kps2[i][1]+2), cv::Scalar(0,255,255), 1, 8);
 	}
 	outputPicture("gftt", src2);
-	
+#endif
+
+#if 0
 	// Test of cornerHarris
 	Mat harris_output(src2.size(), CV_32FC1);
 	Mat harris2;
 	cvtColor(src2, harris2, CV_BGR2GRAY);
 	preCornerDetect(harris2, harris_output, 3);
 	outputPicture("harris", harris_output);
-
+#endif
+	
+#if 0
 	Mat dilated_corners;
 	dilate(harris_output, dilated_corners, Mat(), Point(0,0));
 	Mat corner_mask = harris_output == dilated_corners;
 	outputPicture("corner", corner_mask);
+#endif
 	
 	// Get rid of all blobs that are far away
 	vector<vector<Vec2f> > point_clouds;
-	for (int i=0; i<kps2.size(); i++) {
+	for (size_t i=0; i<kps2.size(); i++) {
 		bool did_add = false;
 		// We're deciding which point cloud to add kps2[i] to
-		for (int j=0; j<point_clouds.size(); j++) {
+		for (size_t j=0; j<point_clouds.size(); j++) {
 			// Find the nearest one in the point cloud
 			double min_dist = 10000.0;
-			for (int k=0; k<point_clouds[j].size(); k++) {
+			for (size_t k=0; k<point_clouds[j].size(); k++) {
 				Vec2f p1 = point_clouds[j][k];
 				Vec2f p2 = kps2[i];
 				Vec2f diff;
@@ -874,20 +674,20 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	// Merge nearby point clouds
 	printf("Number of point clouds: %i\n", point_clouds.size());
 	vector<vector<Vec2f> > new_point_clouds;
-	for (int i=0; i<point_clouds.size(); i++) {
+	for (size_t i=0; i<point_clouds.size(); i++) {
 		vector<Vec2f> cloud;
 		bool did_merge_down = false;
-		for (int k=0; k<point_clouds[i].size(); k++) {
+		for (size_t k=0; k<point_clouds[i].size(); k++) {
 			cloud.push_back(point_clouds[i][k]);
 		}
-		for (int j=0; j<point_clouds.size(); j++) {
+		for (size_t j=0; j<point_clouds.size(); j++) {
 			//printf("Hello? %i %i %i\n", i, j, point_clouds.size());
 			if (i == j) {
 				continue;
 			}
 			double min_dist = 10000.0;
-			for (int k=0; k<point_clouds[i].size(); k++) {
-				for (int m=0; m<point_clouds[j].size(); m++) {
+			for (size_t k=0; k<point_clouds[i].size(); k++) {
+				for (size_t m=0; m<point_clouds[j].size(); m++) {
 					Vec2f p1 = point_clouds[j][m];
 					Vec2f p2 = point_clouds[i][k];
 					Vec2f diff;
@@ -902,7 +702,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 
 			if (min_dist < 20) {
 				// Tack it onto cloud
-				for (int k=0; k<point_clouds[j].size(); k++) {
+				for (size_t k=0; k<point_clouds[j].size(); k++) {
 					cloud.push_back(point_clouds[j][k]);
 				}
 				
@@ -910,30 +710,6 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 					did_merge_down = true;
 				}
 			}
-			
-#if 0
-			if (min_dist < 40) {
-				// Merge them.
-				if (j > i) {
-				printf("Merging clouds %i and %i dist=%f.\n", i, j, min_dist);
-				vector<Vec2f> cloud;
-				for (int k=0; k<point_clouds[i].size(); k++) {
-					cloud.push_back(point_clouds[i][k]);
-				}
-				for (int k=0; k<point_clouds[j].size(); k++) {
-					cloud.push_back(point_clouds[j][k]);
-				}
-				new_point_clouds.push_back(cloud);
-				}
-			} else {
-				// Don't merge them (i.e. do nothing).
-				vector<Vec2f> cloud;
-				for (int k=0; k<point_clouds[i].size(); k++) {
-					cloud.push_back(point_clouds[i][k]);
-				}
-				new_point_clouds.push_back(cloud);
-			}
-#endif
 		}
 		if (!did_merge_down) {
 			new_point_clouds.push_back(cloud);
@@ -944,22 +720,23 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	point_clouds = new_point_clouds;
 	vector<vector<Vec2f> > hulls;
 	printf("There are %i (%i) point clouds.\n", point_clouds.size(), new_point_clouds.size());
-	for (int i=0; i<point_clouds.size(); i++) {
+	for (size_t i=0; i<point_clouds.size(); i++) {
 		printf("Point cloud %i has %i points.\n", i, point_clouds[i].size());
 		vector<Vec2f> hull;
 		if (point_clouds[i].size() > 0) {
 			convexHull(point_clouds[i], hull);
-			for (int i=0; i<hull.size()-1; i++) {
+			for (size_t i=0; i<hull.size()-1; i++) {
 				line(src2, Point(hull[i]), Point(hull[i+1]), Scalar(0,0,255), 1, 8);
 			}
 			hulls.push_back(hull);
 		}
 	}
 
+#if 0
 	// Find the four corners for each hull
-	for (int i=0; i<hulls.size(); i++) {
+	for (size_t i=0; i<hulls.size(); i++) {
 		Vec2f centroid(0,0);
-		for (int j=0; j<hulls[i].size(); j++) {
+		for (size_t j=0; j<hulls[i].size(); j++) {
 			centroid[0] += hulls[i][j][0];
 			centroid[1] += hulls[i][j][1];
 		}
@@ -967,30 +744,23 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		centroid[1] = centroid[1] / hulls[i].size();
 
 		// Now, order the points so that we can apply the other formula
-		for (int j=0; j<hulls[i].size(); j++) {
-		}
 		HullVertexComparator h;
 		h.m_centroid = centroid;
 		std::sort(hulls[i].begin(), hulls[i].end(), h);
-		for (int j=0; j<hulls[i].size(); j++) {
+		for (size_t j=0; j<hulls[i].size(); j++) {
 			double a = getReferenceAngle(hulls[i][j], centroid);
-			printf("Centroid: <%f,%f> Hull %i, pnt %i: <%f,%f> => %f\n", centroid[0], centroid[1], i, j, hulls[i][j][0], hulls[i][j][1], a);
+			//printf("Centroid: <%f,%f> Hull %i, pnt %i: <%f,%f> => %f\n", centroid[0], centroid[1], i, j, hulls[i][j][0], hulls[i][j][1], a);
 		}
 		circle(src2, Point(centroid[0], centroid[1]), 5, Scalar(0,255,255), 2);
 
 		// Find the centroid
 		// But first, find the area.
-#if 1
 		double A = 0.0;
-#if 0
-		for (int j=0; j<hulls[i].size()-1; j++) {
-		}
-#endif
 
 		// Now, find the centroid
 		//Vec2f centroid(0,0);
 		centroid[0] = centroid[1] = 0;
-		for (int j=0; j<hulls[i].size()-1; j++) {
+		for (size_t j=0; j<hulls[i].size()-1; j++) {
 			double a = hulls[i][j][0] * hulls[i][j+1][1] - hulls[i][j+1][0] * hulls[i][j][1];
 			centroid[0] += (hulls[i][j][0] + hulls[i][j+1][0]) * a;
 			centroid[1] += (hulls[i][j][1] + hulls[i][j+1][1]) * a;
@@ -1008,14 +778,14 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		centroid[0] *= 1.0/(6.0 * A);
 		centroid[1] *= 1.0/(6.0 * A);
 		printf("We have a centroid, and I'm not telling what it is. (%f,%f A=%f)\n", centroid[0], centroid[1], A);
-#endif
 
 		circle(src2, Point(centroid[0], centroid[1]), 10, Scalar(0,255,255), 2);
 	}
+#endif
 
 	// Find the rectangle edges for each hull...
 	vector<Rectangle3d> new_rects_3d;
-	for (int i=0; i<hulls.size(); i++) {
+	for (size_t i=0; i<hulls.size(); i++) {
 		if (hulls[i].size() < 4) {
 			continue;
 		}
@@ -1027,7 +797,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		int closest_indices[4] = {-1,-1,-1,-1};
 		double SKIP_DIST = 20.0;
 		int SKIP_CNT = 3;
-		for (int j=0; j<hulls[i].size(); j++) {
+		for (size_t j=0; j<hulls[i].size(); j++) {
 			int index0 = (j-SKIP_CNT+hulls[i].size())%hulls[i].size();//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
 			int index1 = j;
 			int index2 = (j+SKIP_CNT)%hulls[i].size();//(j+SKIP_CNT) % hulls[i].size();
@@ -1080,7 +850,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		// Pass them into the Rectangle3D framework
 		Polygon poly;
 		vector<Vec2i> corners;
-		for (int j=0; j<4; j++) {
+		for (size_t j=0; j<4; j++) {
 			corners.push_back(Vec2i(hulls[i][closest_indices[j]][0],hulls[i][closest_indices[j]][1]));
 		}
 		poly.fromCorners(corners);
@@ -1091,7 +861,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 
 		// Check to make sure that "0" isn't in the bounds.
 		// It's naive, but it'll also remove many false-positives from the test cases.
-		for (int j=0; j<4; j++) {
+		for (size_t j=0; j<4; j++) {
 			if (b[j] <= 0) {
 				is_valid_rect = false;
 			}
@@ -1109,144 +879,11 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		char bufname[2048];
 		snprintf(bufname, 2048, "pc_%02i", i);
 		Mat pc_img;
-		for (int j=0; j<hulls[i].size(); j++) {
+		for (size_t j=0; j<hulls[i].size(); j++) {
 			circle(src2, Point(hulls[i][j][0], hulls[i][j][1]), 5, Scalar(255,0,255), 2);
 		}
 		outputPicture(bufname, pc_img);
 	}
 	outputPicture("newalg", src2);
 	return new_rects_3d;
-	//printf("EXITING... Press ctrl-C\n"); while(1);
-
-	// Let's do that again, but using a haugh transform
-	vector<Mat> contour_images;
-	for (int i=0; i<hulls.size(); i++) {
-		char img_name[2048];
-		snprintf(img_name, 2048, "haugh_%02i", i);
-		contour_images.push_back(myHaughTransform(hulls[i], img_name));
-	}
-
-	outputPicture("cvxhull", src2);
-
-	// Alright, back to the "canonical" algorithm
-    Canny( src, dst, 50, 200, 3, true );
-    cvtColor( dst, color_dst, CV_GRAY2BGR );
-
-	//outputPicture("canny", color_dst);
-
-    vector<Vec4i> lines;
-	// Rho (distance), theta, threshold, minlen, maxgap
-    //HoughLinesP( dst, lines, 1, CV_PI/3600, 10, 10, 15 );
-    HoughLinesP( contour_images[0], lines, 1, CV_PI/3600, 10, 10, 15 );
-	Scalar color1(0,0,255);
-	Scalar color2(255,0,0);
-	Scalar colors[2] = {color1, color2};
-    for( size_t i = 0; i < lines.size(); i++ )
-    {
-        line( color_dst, Point(lines[i][0], lines[i][1]),
-            Point(lines[i][2], lines[i][3]), colors[i%2], 3, 8 );
-    }
-
-	//outputPicture("lines", color_dst);
-
-    // Detect rectangles
-    printf("We found %lu lines.\n", lines.size());
-    vector<Polygon> rectangles_2d = detectRectangles(lines);
-    vector<Rectangle3d> rectangles_3d;
-    for (size_t i=0; i<rectangles_2d.size(); i++) {
-      Rectangle3d r(rectangles_2d[i]);
-      r.solve((double)src.size().width, (double)src.size().height, 60.0,60.0, 7.0,2.75);
-      rectangles_3d.push_back(r);
-	  
-	  // Add the edges of the rects to color_dst
-	  Vec4i b = r.get_image_bounds();
-	  printf("%i %i %i %i\n", b[1],b[0],b[2],b[3]);
-	  rectangle(color_dst, Point(b[1], b[0]), Point(b[2], b[3]), Scalar(0,255,0), 1, 8);
-    }
-	
-	outputPicture("lines", color_dst);
-
-    // Print information on all of them with roughly the right aspect ratio
-    for (size_t i=0; i<rectangles_3d.size(); i++) {
-      double ar = rectangles_3d[i].aspect_ratio();
-      if (ar > 2.0 && ar < 3.0) {
-		printf("Distance to rect %lu is %f, ar=%f\n", i, rectangles_3d[i].centroid_dist(), ar);
-      }
-    }
-	
-	printf("Exiting at the end of the rectangle processor.\n");
-	exit(0);
-	
-	return rectangles_3d;
 }
-
-#if 0
-int main(int argc, char** argv)
-{
-    std::cout << "Hello?\n";
- //printf("Welcome to the thing...\n");
-    Mat src, dst, color_dst;
-    if( argc != 2 || !(src=imread(argv[1], 0)).data)
-        return -1;
-
-    resize(src, src, Size(640,480));
-    Canny( src, dst, 50, 200, 3 );
-    cvtColor( dst, color_dst, CV_GRAY2BGR );
-
-   //printf("Hello?\n");
-
-#if 0
-    vector<Vec2f> lines;
-    HoughLines( dst, lines, 1, CV_PI/180, 100 );
-
-    for( size_t i = 0; i < lines.size(); i++ )
-    {
-        float rho = lines[i][0];
-        float theta = lines[i][1];
-        double a = cos(theta), b = sin(theta);
-        double x0 = a*rho, y0 = b*rho;
-        Point pt1(cvRound(x0 + 1000*(-b)),
-                  cvRound(y0 + 1000*(a)));
-        Point pt2(cvRound(x0 - 1000*(-b)),
-                  cvRound(y0 - 1000*(a)));
-        line( color_dst, pt1, pt2, Scalar(0,0,255), 3, 8 );
-    }
-#else
-    vector<Vec4i> lines;
-    HoughLinesP( dst, lines, 1, CV_PI/180, 50, 10, 20 );
-    for( size_t i = 0; i < lines.size(); i++ )
-    {
-        line( color_dst, Point(lines[i][0], lines[i][1]),
-            Point(lines[i][2], lines[i][3]), Scalar(0,0,255), 3, 8 );
-    }
-
-    // Detect rectangles
-   //printf("We found %lu lines.\n", lines.size());
-    vector<Polygon> rectangles_2d = detectRectangles(lines);
-    vector<Rectangle3d> rectangles_3d;
-    for (size_t i=0; i<rectangles_2d.size(); i++) {
-      Rectangle3d r(rectangles_2d[i]);
-      r.solve((double)src.size().width, (double)src.size().height, 60.0,60.0, 7.0,2.75);
-      rectangles_3d.push_back(r);
-    }
-
-    // Print information on all of them with roughly the right aspect ratio
-    for (size_t i=0; i<rectangles_3d.size(); i++) {
-      double ar = rectangles_3d[i].aspect_ratio();
-      if (ar > 2.0 && ar < 3.0) {
-	printf("Distance to rect %lu is %f, ar=%f\n", i, rectangles_3d[i].centroid_dist(), ar);
-      }
-    }
-#endif
-#if 1
-    namedWindow( "Source", 1 );
-    imshow( "Source", src );
-
-    namedWindow( "Detected Lines", 1 );
-    imshow( "Detected Lines", color_dst );
-
-    waitKey(0);
-#endif
-    return 0;
-}
-#endif

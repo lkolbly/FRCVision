@@ -61,7 +61,7 @@ void *networkMain(void *arg)
 		//printf("DOWNLOADING IMAGE.\n");
 		//printf("Copying network-tmp.jpg to storage-tmp.jpg\n");
 		CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
-		Sleep(50);
+		//Sleep(50);
 		td->has_processed_image = 0;
 		td->collection_cfg.uid = rand();
 		pthread_mutex_unlock(&td->image_file_lock);

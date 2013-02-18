@@ -1,6 +1,7 @@
 # Tester for the FRC Vision.
 # Connects to the server, and prints out the target data.
 import socket, struct, time
+import urllib2
 
 def getData(s, nbytes):
         data = ""
@@ -18,6 +19,7 @@ sock.send(struct.pack("!III", 4, 1, 1)) # Handshake
 data = getData(sock, 4)
 getData(sock, struct.unpack("!I", data)[0]+4)
 
+cnt = 0
 def getResponse():
         # Request a camera update frame.
         sock.send(struct.pack("!IIBH", 3, 0x02000001, 0x01, 1))
@@ -35,17 +37,21 @@ def getResponse():
         for i in range(ntargets):
                 #print i, ntargets
                 values = struct.unpack("!hHHHHHH", getData(sock,14))
-                print values
+                print i, values
+                f = open("unittest/%i"%cnt, "w");
+                f.write("tgt %i, %s\n"%(i, values))
+                f.close()
+
+        f = urllib2.urlopen("http://localhost:8006/")
+        open("unittest/test-case-%i.jpg"%cnt, "wb").write(f.read())
+        f.close()
 
 while 1:
         getResponse()
         time.sleep(2);
+        cnt += 1
 
 sock.shutdown(0)
 
 # Real quick, let's go grab the test case we ran against
-import urllib2
 
-f = urllib2.urlopen("http://localhost:8006/")
-open("test-case.jpg", "wb").write(f.read())
-f.close()

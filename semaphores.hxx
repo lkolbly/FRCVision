@@ -32,6 +32,9 @@ typedef struct threadData_t {
 	processedImagery_t *processing_result;
 	processorConfig_t processing_config;
 	
+	// The networking heartbeat
+	pthread_mutex_t network_heartbeat_mutex;
+	int networking_is_dead;
 } threadData_t;
 
 #endif

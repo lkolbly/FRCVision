@@ -204,14 +204,14 @@ int Client::update(void)
 				for (size_t i=0; i<m_td->processing_result->targets.size(); i++) {
 					Target t = m_td->processing_result->targets[i];
 					short azimuth = htons(t.azimuth * 10);
-					unsigned short elevation = htons(t.elevation * 10);
+					unsigned short offcenter_angle = htons(t.offcenter_angle * 10);
 					unsigned short distance = htons(t.centroid_distance * 10);
 					unsigned short left = htons(t.px_left);
 					unsigned short right = htons(t.px_right);
 					unsigned short top = htons(t.px_top);
 					unsigned short bottom = htons(t.px_bottom);
 					memcpy(outgoing+datalen, &azimuth, 2);
-					memcpy(outgoing+datalen+2, &elevation, 2);
+					memcpy(outgoing+datalen+2, &offcenter_angle, 2);
 					memcpy(outgoing+datalen+4, &distance, 2);
 					memcpy(outgoing+datalen+6, &left, 2);
 					memcpy(outgoing+datalen+8, &right, 2);

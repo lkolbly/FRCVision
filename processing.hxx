@@ -22,7 +22,7 @@ class Target
 {
 public:
 	double centroid_distance;
-	double azimuth, elevation;
+	double azimuth, elevation, offcenter_angle;
 	int px_left, px_top, px_right, px_bottom;
 };
 

@@ -2,6 +2,7 @@
 #include "networking.hxx"
 #include "processing.hxx"
 #include "server.hxx"
+#include "killserver.hxx"
 #include "semaphores.hxx"
 #include <pthread.h>
 #include <stdio.h>
@@ -89,12 +90,12 @@ cfgEndElem(void *data, const char *el, const char **attr)
 }
 
 // This is a bit of a hackish way to do it, since WE DON'T HAVE CONFIG FILES (Michael...)
-void loadConfigFiles(threadData_t *td)
+int loadConfigFiles(threadData_t *td)
 {
 	FILE *f = fopen("camera.xml", "rb");
 	if (!f) {
 		fprintf(stderr, "Couldn't open 'camera.xml'\n");
-		return;
+		return 1;
 	}
 
 	XML_Parser p = XML_ParserCreate(NULL);
@@ -118,6 +119,7 @@ void loadConfigFiles(threadData_t *td)
 	}
 	XML_ParserFree(p);
 	fclose(f);
+	return 0;
 }
 
 int main ( int argc, char **argv )
@@ -144,11 +146,15 @@ int main ( int argc, char **argv )
 	td.processing_result = NULL;
 	td.mutex = new_Image_Mutex;
 	td.var = 0;
-	loadConfigFiles(&td);
+	if (loadConfigFiles(&td)) {
+		fprintf(stderr, "There was an issue reading the config file.\n");
+		return 2;
+	}
 	pthread_mutex_init(&td.image_file_lock, NULL);
 	pthread_mutex_init(&td.processed_data_lock, NULL);
+	pthread_mutex_init(&td.network_heartbeat_mutex, NULL);
 
-	pthread_t networking_thread, processing_thread, server_thread;
+	pthread_t networking_thread, processing_thread, server_thread, killserver_thread;
 	int rc;
 	rc = pthread_create(&networking_thread, NULL, networkMain, &td);
 	assert(0==rc);
@@ -158,6 +164,32 @@ int main ( int argc, char **argv )
 	
 	rc = pthread_create(&server_thread, NULL, serverMain, &td);
 	assert(0==rc);
+	
+	killServerArg_t ks_td;
+	pthread_mutex_init(&ks_td.mutex, NULL);
+	ks_td.needs_death = 0;
+	rc = pthread_create(&killserver_thread, NULL, killServerMain, &ks_td);
+	assert(0==rc);
+
+	while (1) {
+		// Check the networking thread
+		pthread_mutex_lock(&td.network_heartbeat_mutex);
+		if (td.networking_is_dead) {
+			fprintf(stderr, "Networking had an issue and needs to close.\n");
+			return 1;
+		}
+		pthread_mutex_unlock(&td.network_heartbeat_mutex);
+
+		// Check the killserver thread
+		pthread_mutex_lock(&ks_td.mutex);
+		if (ks_td.needs_death) {
+			fprintf(stderr, "Sombody connected to the death port.\n");
+			return 2;
+		}
+		pthread_mutex_unlock(&ks_td.mutex);
+
+		Sleep(100);
+	}
 	
 	void *retval;
 	rc = pthread_join(networking_thread, &retval);

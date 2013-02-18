@@ -76,5 +76,8 @@ void *networkMain(void *arg)
 	curl_easy_cleanup(c);
 
 	curl_global_cleanup();
+	pthread_mutex_lock(&td->network_heartbeat_mutex);
+	td->networking_is_dead = 1;
+	pthread_mutex_unlock(&td->network_heartbeat_mutex);
 	return (void*)1;
 }

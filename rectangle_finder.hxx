@@ -58,10 +58,12 @@ public:
   // Returns the distance to the geometric mean
   double distance(void);
   double centroid_dist(void);
+  cv::Vec3f normal(void);
 
   double aspect_ratio(void);
   double azimuth(void);
   double elevation(void);
+  double offcenter_angle(void);
   cv::Vec4i get_image_bounds(void);
 };
 

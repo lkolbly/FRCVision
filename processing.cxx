@@ -114,6 +114,7 @@ processedImagery_t *processFile(const char *in_fname)
 		t.centroid_distance = r.centroid_dist();
 		t.azimuth = r.azimuth();
 		t.elevation = r.elevation();
+		t.offcenter_angle = r.offcenter_angle();
 		Vec4i bounds = r.get_image_bounds();
 		t.px_left = bounds[0];
 		t.px_top = bounds[1];

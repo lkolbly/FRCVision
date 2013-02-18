@@ -37,6 +37,13 @@ double vec_dist(Vec2f v1, Vec2f v2)
 	return pnt_dist(v1[0], v1[1], v2[0], v2[1]);
 }
 
+Vec2f my_normalize(Vec2f v)
+{
+	//printf("Normalizing? Maybe?\n");
+	double len = sqrt(v[0]*v[0] + v[1]*v[1]);
+	return Vec2f(v[0]/len, v[1]/len);
+}
+
 vector<Vec4i> Polygon::get_edges(void) {
 	return m_edges;
 }
@@ -480,6 +487,51 @@ double Rectangle3d::elevation(void)
 {
 	Vec3f p = get_centroid();
 	return m_camera_FOV[1] * p[1] / (p[2] * sin(DEG2RAD(m_camera_FOV[1])));
+}
+
+Vec3f calc_normal(Vec3f p1, Vec3f p2, Vec3f p3)
+{
+	Vec3f a(p1[0]-p2[0], p1[1]-p2[1], p1[2]-p2[2]);// = p1 - p2;
+	Vec3f b(p3[0]-p2[0], p3[1]-p2[1], p3[2]-p2[2]);// = p3 - p2;
+	Vec3f n;
+	n[0] = a[1]*b[2] + a[2]*b[1];
+	n[1] = a[2]*b[0] + a[0]*b[2];
+	n[2] = a[1]*b[0] + a[0]*b[1];
+	return n;
+}
+
+// Compute the (average) three-space normal for the quadrangle
+Vec3f Rectangle3d::normal(void)
+{
+	vector<Vec3f> pnts = get_points();
+	Vec3f normals[4];
+	for (int i=0; i<4; i++) {
+	normals[i] = calc_normal(pnts[(i+0)%4], pnts[(i+1)%4], pnts[(i+2)%4]);
+	}
+	Vec3f n(0,0,0);
+	for (int i=0; i<4; i++) {
+		n[0] += normals[i][0];
+		n[1] += normals[i][1];
+		n[2] += normals[i][2];
+	}
+	n[0] /= 4.0;
+	n[1] /= 4.0;
+	n[2] /= 4.0;
+	//printf("Computing a normal...\n");
+	return n;
+}
+
+double Rectangle3d::offcenter_angle(void)
+{
+	Vec3f centroid = get_centroid();
+	Vec2f c(centroid[0], centroid[1]);
+	Vec2f tr = -c;
+	Vec3f n3 = normal();
+	Vec2f n(n3[0],n3[1]);
+	//printf("Hello?\n");
+	n = my_normalize(n);
+	double dp = tr[0]*n[0] + tr[1]*n[1];
+	return acos(dp);
 }
 
 Vec4i Rectangle3d::get_image_bounds(void)

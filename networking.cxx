@@ -6,6 +6,8 @@
 #include "networking.hxx"
 #include "semaphores.hxx"
 
+FILE *network_Log_File;
+
 size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 {
 	//printf("Got %i bytes/%i memb.\n", size, nmemb);
@@ -24,15 +26,22 @@ int networkingDownloadImage(CURL *c)
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
 	int success = curl_easy_perform(c);
 	if (success) {
-		printf("Success was %i: %s\n", success, curl_easy_strerror((CURLcode)success));
+		fprintf(network_Log_File, "Success was %i: %s\n", success, curl_easy_strerror((CURLcode)success));
 	}
 	fclose(f);
 	//Sleep(1000);
 	return success;
 }
 
+void networkCloseLogFile(void)
+{
+	fclose(network_Log_File);
+}
+
 void *networkMain(void *arg)
 {
+	network_Log_File = fopen("network.log", "w");
+
 	threadData_t *td = (threadData_t*)arg;
 	printf("Starting networking thread.\n");
 	curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -64,7 +73,7 @@ void *networkMain(void *arg)
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		printf("DOWNLOADING IMAGE.\n");
+		//printf("DOWNLOADING IMAGE.\n");
 		//printf("Copying network-tmp.jpg to storage-tmp.jpg\n");
 		CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
 		//Sleep(50);

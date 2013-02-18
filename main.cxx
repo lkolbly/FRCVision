@@ -124,6 +124,8 @@ int loadConfigFiles(threadData_t *td)
 
 int main ( int argc, char **argv )
 {
+	FILE *log = fopen("main.log", "w");
+
     WORD wVersionRequested;
     WSADATA wsaData;
     int err;
@@ -135,7 +137,8 @@ int main ( int argc, char **argv )
     if (err != 0) {
         /* Tell the user that we could not find a usable */
         /* Winsock DLL.                                  */
-        printf("WSAStartup failed with error: %d\n", err);
+        fprintf(log, "WSAStartup failed with error: %d\n", err);
+		fclose(log);
         return 1;
     }
 
@@ -147,7 +150,8 @@ int main ( int argc, char **argv )
 	td.mutex = new_Image_Mutex;
 	td.var = 0;
 	if (loadConfigFiles(&td)) {
-		fprintf(stderr, "There was an issue reading the config file.\n");
+		fprintf(log, "There was an issue reading the config file.\n");
+		fclose(log);
 		return 2;
 	}
 	pthread_mutex_init(&td.image_file_lock, NULL);
@@ -177,8 +181,10 @@ int main ( int argc, char **argv )
 	while (1) {
 		// Check the networking thread
 		pthread_mutex_lock(&td.network_heartbeat_mutex);
+		//printf("%i\n", td.networking_is_dead);
 		if (td.networking_is_dead) {
-			fprintf(stderr, "Networking had an issue and needs to close.\n");
+			fprintf(log, "Networking had an issue and needs to close.\n");
+			fclose(log);
 			return 1;
 		}
 		pthread_mutex_unlock(&td.network_heartbeat_mutex);
@@ -186,7 +192,8 @@ int main ( int argc, char **argv )
 		// Check the killserver thread
 		pthread_mutex_lock(&ks_td.mutex);
 		if (ks_td.needs_death) {
-			fprintf(stderr, "Sombody connected to the death port.\n");
+			fprintf(log, "Sombody connected to the death port.\n");
+			fclose(log);
 			return 2;
 		}
 		pthread_mutex_unlock(&ks_td.mutex);
@@ -198,11 +205,13 @@ int main ( int argc, char **argv )
 	rc = pthread_join(networking_thread, &retval);
 	printf("%p\n", retval);
 	if (retval != 0) {
-		fprintf(stderr, "An error occurred in the networking thread. Exiting.\n");
+		fprintf(log, "An error occurred in the networking thread. Exiting.\n");
+		fclose(log);
 		return 1; // 1 == error due to network issue
 	}
 	rc = pthread_join(processing_thread, NULL);
 	rc = pthread_join(server_thread, NULL);
+	fclose(log);
 	return 0;
 
 	networkMain(NULL);

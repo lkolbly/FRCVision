@@ -27,13 +27,13 @@ def getResponse():
         # Wait for the response.
         data = getData(sock, 4)
         data = getData(sock, 4)
-        print len(data)
         if struct.unpack("!I", data)[0] != 0x82000002:
         	print "We were sent the wrong packet type"
 
         data = getData(sock, 2) # Eat the sub-type ID
 
         ntargets = struct.unpack("!H", getData(sock, 2))[0]
+        print "Got %i targets."%ntargets
         for i in range(ntargets):
                 #print i, ntargets
                 values = struct.unpack("!hHHHHHH", getData(sock,14))

@@ -16,7 +16,7 @@ by changing "#if 1" to "#if 0" and back */
 #define RAD2DEG(x) ((x)*57.2957795)
 
 #define POLYGON_DEBUG 0
-#define ENABLE_DEBUG_IMAGES 0
+#define ENABLE_DEBUG_IMAGES 1
 
 using namespace cv;
 
@@ -690,6 +690,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 #endif
 	
 	// Get rid of all blobs that are far away
+	int POINT_CLOUD_MIN_DIST = 5; // Distance which makes two point clouds the same
 	vector<vector<Vec2f> > point_clouds;
 	for (size_t i=0; i<kps2.size(); i++) {
 		bool did_add = false;
@@ -705,9 +706,9 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 				diff[1] = p2[1]-p1[1];
 				double dist = sqrt(diff[0]*diff[0] + diff[1]*diff[1]);
 				if (dist < min_dist) min_dist = dist;
-				if (min_dist < 20) break;
+				if (min_dist < POINT_CLOUD_MIN_DIST) break;
 			}
-			if (min_dist < 20) {
+			if (min_dist < POINT_CLOUD_MIN_DIST) {
 				// Add it
 				point_clouds[j].push_back(kps2[i]);
 				did_add = true;
@@ -752,7 +753,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 				}
 			}
 
-			if (min_dist < 20) {
+			if (min_dist < POINT_CLOUD_MIN_DIST) {
 				// Tack it onto cloud
 				for (size_t k=0; k<point_clouds[j].size(); k++) {
 					cloud.push_back(point_clouds[j][k]);
@@ -848,7 +849,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		double closest_dps[4] = {90.0, 90.0, 90.0, 90.0};
 		int closest_indices[4] = {-1,-1,-1,-1};
 		double SKIP_DIST = 20.0;
-		int SKIP_CNT = 3;
+		int SKIP_CNT = 1;
 		for (size_t j=0; j<hulls[i].size(); j++) {
 			int index0 = (j-SKIP_CNT+hulls[i].size())%hulls[i].size();//(j-SKIP_CNT + hulls[i].size()) % hulls[i].size();
 			int index1 = j;
@@ -886,6 +887,10 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		for (int j=0; j<4; j++) {
 			//printf("Closest DPS %i: %f\n", j, closest_dps[j]);
 			circle(src2, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), 10, Scalar(255,0,255), 2);
+
+			char render_text[2048];
+			snprintf(render_text, 2048, "%.2f", closest_dps[j]);
+			putText(src2, render_text, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255,255,0));
 		}
 		
 		// Check to make sure that we actually have four points

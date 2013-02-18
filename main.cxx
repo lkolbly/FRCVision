@@ -168,6 +168,9 @@ int main ( int argc, char **argv )
 	killServerArg_t ks_td;
 	pthread_mutex_init(&ks_td.mutex, NULL);
 	ks_td.needs_death = 0;
+	ks_td.secret = (unsigned char*)strdup("0000000000000000");
+	memset(ks_td.secret, 0, 16);
+	ks_td.secret_len = 16;
 	rc = pthread_create(&killserver_thread, NULL, killServerMain, &ks_td);
 	assert(0==rc);
 

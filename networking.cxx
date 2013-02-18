@@ -64,7 +64,7 @@ void *networkMain(void *arg)
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		//printf("DOWNLOADING IMAGE.\n");
+		printf("DOWNLOADING IMAGE.\n");
 		//printf("Copying network-tmp.jpg to storage-tmp.jpg\n");
 		CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
 		//Sleep(50);

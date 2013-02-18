@@ -122,7 +122,7 @@ processedImagery_t *processFile(const char *in_fname)
 		v->targets.push_back(t);
 	}
 	//std::sort(v.targets.begin(), v.targets.end(), sortTargets);
-	printf("I have %i targets!\n", v->targets.size());
+	//printf("I have %i targets!\n", v->targets.size());
 #endif
 
 	return v;

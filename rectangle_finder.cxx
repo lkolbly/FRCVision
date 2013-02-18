@@ -348,8 +348,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	// Find the four lines that extend to the corners from the camera
 	Vec2f coefs[4];
 	for (int i=0; i<4; i++) {
-	m_coefs[i] = coef_from_point((double)m_corners[i][0], (double)m_corners[i][1],
-	w, h, fovx, fovy);
+		m_coefs[i] = coef_from_point((double)m_corners[i][0], (double)m_corners[i][1], w, h, fovx, fovy);
 	}
 
 	// Solve to figure out the distance along said lines to make the angles 90deg
@@ -360,7 +359,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	double last_inaccuracy = 0.0;
 	while (1) {
 		double sum = find_squareness(coefs, dist);
-		printf("Inaccuracy: %f (k=%f)\n", sum, k);
+		//printf("Inaccuracy: %f (k=%f)\n", sum, k);
 		if (last_inaccuracy-sum < 0.001) {
 			break;
 		}
@@ -673,7 +672,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	}
 
 	// Merge nearby point clouds
-	printf("Number of point clouds: %i\n", point_clouds.size());
+	//printf("Number of point clouds: %i\n", point_clouds.size());
 	vector<vector<Vec2f> > new_point_clouds;
 	for (size_t i=0; i<point_clouds.size(); i++) {
 		vector<Vec2f> cloud;
@@ -720,9 +719,9 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	// Convex hull this sucker
 	point_clouds = new_point_clouds;
 	vector<vector<Vec2f> > hulls;
-	printf("There are %i (%i) point clouds.\n", point_clouds.size(), new_point_clouds.size());
+	//printf("There are %i (%i) point clouds.\n", point_clouds.size(), new_point_clouds.size());
 	for (size_t i=0; i<point_clouds.size(); i++) {
-		printf("Point cloud %i has %i points.\n", i, point_clouds[i].size());
+		//printf("Point cloud %i has %i points.\n", i, point_clouds[i].size());
 		vector<Vec2f> hull;
 		if (point_clouds[i].size() > 0) {
 			convexHull(point_clouds[i], hull);
@@ -833,7 +832,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 
 		// Render these four points
 		for (int j=0; j<4; j++) {
-			printf("Closest DPS %i: %f\n", j, closest_dps[j]);
+			//printf("Closest DPS %i: %f\n", j, closest_dps[j]);
 			circle(src2, Point(hulls[i][closest_indices[j]][0], hulls[i][closest_indices[j]][1]), 10, Scalar(255,0,255), 2);
 		}
 		
@@ -869,7 +868,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		}
 		if (!is_valid_rect) continue;
 
-		printf("%i %i %i %i\n", b[1],b[0],b[3],b[2]);
+		//printf("%i %i %i %i\n", b[1],b[0],b[3],b[2]);
 		rectangle(src2, Point(b[0], b[2]), Point(b[1], b[3]), Scalar(0,255,0), 1, 8);
 		char render_text[2048];
 		snprintf(render_text, 2048, "%i %i %i %i", b[0], b[1], b[2], b[3]);

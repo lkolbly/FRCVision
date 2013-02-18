@@ -160,7 +160,7 @@ int Client::update(void)
 		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
 
 #if 0
-			cv::Mat M = m_td->processing_result.img_data;
+			cv::Mat M = m_td->processing_result->img_data;
 			unsigned char *outgoing = (unsigned char*)malloc(14+M.rows*M.cols);
 			outgoing[0] = 0; // Camera ID
 			long timestamp = 0;
@@ -192,12 +192,12 @@ int Client::update(void)
 				memcpy(outgoing+datalen, &subframe_id, 2);
 				datalen += 2;
 
-				unsigned short ntargets = htons(m_td->processing_result.targets.size());
+				unsigned short ntargets = htons(m_td->processing_result->targets.size());
 				memcpy(outgoing+datalen, &ntargets, 2);
 				datalen += 2;
 				
-				for (int i=0; i<m_td->processing_result.targets.size(); i++) {
-					Target t = m_td->processing_result.targets[i];
+				for (int i=0; i<m_td->processing_result->targets.size(); i++) {
+					Target t = m_td->processing_result->targets[i];
 					short azimuth = htons(t.azimuth * 10);
 					unsigned short elevation = htons(t.elevation * 10);
 					unsigned short distance = htons(t.centroid_distance * 10);

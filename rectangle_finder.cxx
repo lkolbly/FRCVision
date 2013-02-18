@@ -654,6 +654,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 				diff[1] = p2[1]-p1[1];
 				double dist = sqrt(diff[0]*diff[0] + diff[1]*diff[1]);
 				if (dist < min_dist) min_dist = dist;
+				if (min_dist < 20) break;
 			}
 			if (min_dist < 20) {
 				// Add it
@@ -813,7 +814,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 							// Check the distance
 							if (closest_indices[m] > -1) {
 								double dist = vec_dist(hulls[i][index1],hulls[i][closest_indices[m]]);
-								printf("Distance between %i and %i is %f\n", index1, closest_indices[m], dist);
+								//printf("Distance between %i and %i is %f\n", index1, closest_indices[m], dist);
 								if (dist < SKIP_DIST) {
 									is_too_close = true;
 									break;

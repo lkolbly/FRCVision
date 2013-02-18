@@ -26,9 +26,12 @@ public:
 	int px_left, px_top, px_right, px_bottom;
 };
 
+#if 0
 class processedImagery_t
 {
 public:
+#endif
+typedef struct {
 	// Some sort of image? Maybe?
 	char *filename; // Filename of the final image
 	int uid;
@@ -41,7 +44,10 @@ public:
 	unsigned char *render_contours(unsigned int &len);
 	
 	vector<trackingObject_t> tracking_targets;
+} processedImagery_t;
+#if 0
 };
+#endif
 
 void *processingMain(void *arg);
 

@@ -1,6 +1,6 @@
 # Tester for the FRC Vision.
 # Connects to the server, and prints out the target data.
-import socket, struct
+import socket, struct, time
 
 def getData(s, nbytes):
         data = ""
@@ -18,23 +18,28 @@ sock.send(struct.pack("!III", 4, 1, 1)) # Handshake
 data = getData(sock, 4)
 getData(sock, struct.unpack("!I", data)[0]+4)
 
-# Request a camera update frame.
-sock.send(struct.pack("!IIBH", 3, 0x02000001, 0x01, 1))
+def getResponse():
+        # Request a camera update frame.
+        sock.send(struct.pack("!IIBH", 3, 0x02000001, 0x01, 1))
 
-# Wait for the response.
-data = getData(sock, 4)
-data = getData(sock, 4)
-print len(data)
-if struct.unpack("!I", data)[0] != 0x82000002:
-	print "We were sent the wrong packet type"
+        # Wait for the response.
+        data = getData(sock, 4)
+        data = getData(sock, 4)
+        print len(data)
+        if struct.unpack("!I", data)[0] != 0x82000002:
+        	print "We were sent the wrong packet type"
 
-data = getData(sock, 2) # Eat the sub-type ID
+        data = getData(sock, 2) # Eat the sub-type ID
 
-ntargets = struct.unpack("!H", getData(sock, 2))[0]
-for i in range(ntargets):
-        #print i, ntargets
-        values = struct.unpack("!hHHHHHH", getData(sock,14))
-        print values
+        ntargets = struct.unpack("!H", getData(sock, 2))[0]
+        for i in range(ntargets):
+                #print i, ntargets
+                values = struct.unpack("!hHHHHHH", getData(sock,14))
+                print values
+
+while 1:
+        getResponse()
+        time.sleep(2);
 
 sock.shutdown(0)
 

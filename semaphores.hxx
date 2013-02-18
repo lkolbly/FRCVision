@@ -29,7 +29,7 @@ typedef struct threadData_t {
 	
 	// Information about the processing thread
 	pthread_mutex_t processed_data_lock;
-	processedImagery_t processing_result;
+	processedImagery_t *processing_result;
 	processorConfig_t processing_config;
 	
 } threadData_t;

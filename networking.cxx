@@ -13,19 +13,20 @@ size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 	return size*nmemb;
 }
 
-void networkingDownloadImage(CURL *c)
+int networkingDownloadImage(CURL *c)
 {
 	//printf("Downloading file.\n");
 	FILE *f = fopen("network-tmp.jpg", "wb");
 	if (!f) {
 		fprintf(stderr, "We couldn't open tmp.jpg...\n");
-		return;
+		return -1;
 	}
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
 	int success = curl_easy_perform(c);
-	//printf("Success was %s\n", curl_easy_strerror((CURLcode)success));
+	printf("Success was %i: %s\n", success, curl_easy_strerror((CURLcode)success));
 	fclose(f);
 	//Sleep(1000);
+	return success;
 }
 
 void *networkMain(void *arg)
@@ -54,11 +55,14 @@ void *networkMain(void *arg)
 	// TODO: Some sort of flow rate.
 	// TODO: Multiple cameras.
 	while (1) {
-		networkingDownloadImage(c);
+		if (networkingDownloadImage(c)) {
+			fprintf(stderr, "An error has occurred while attempting to access the HTTP camera at '%s'\n", camera_url);
+			break;
+		}
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		//printf("DOWNLOADING IMAGE.\n");
+		printf("DOWNLOADING IMAGE.\n");
 		//printf("Copying network-tmp.jpg to storage-tmp.jpg\n");
 		CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
 		//Sleep(50);
@@ -70,5 +74,5 @@ void *networkMain(void *arg)
 	curl_easy_cleanup(c);
 
 	curl_global_cleanup();
-	return 0;
+	return (void*)1;
 }

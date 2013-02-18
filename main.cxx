@@ -141,6 +141,7 @@ int main ( int argc, char **argv )
 	pthread_mutex_t new_Image_Mutex;
 	pthread_mutex_init(&new_Image_Mutex, NULL);
 	threadData_t td;
+	td.processing_result = NULL;
 	td.mutex = new_Image_Mutex;
 	td.var = 0;
 	loadConfigFiles(&td);
@@ -158,7 +159,13 @@ int main ( int argc, char **argv )
 	rc = pthread_create(&server_thread, NULL, serverMain, &td);
 	assert(0==rc);
 	
-	rc = pthread_join(networking_thread, NULL);
+	void *retval;
+	rc = pthread_join(networking_thread, &retval);
+	printf("%p\n", retval);
+	if (retval != 0) {
+		fprintf(stderr, "An error occurred in the networking thread. Exiting.\n");
+		return 1; // 1 == error due to network issue
+	}
 	rc = pthread_join(processing_thread, NULL);
 	rc = pthread_join(server_thread, NULL);
 	return 0;

@@ -51,22 +51,27 @@ bool sortTargets(Target a, Target b)
 	return true;
 }
 
-processedImagery_t processFile(const char *in_fname)
+processedImagery_t *processFile(const char *in_fname)
 {
 	//printf("Processing image '%s'\n", in_fname);
 
-	processedImagery_t v;
+	processedImagery_t *v = (processedImagery_t*)malloc(sizeof(processedImagery_t));
 	FILE *f = fopen(in_fname, "rb");
 	if (!f) {
 		printf("Could not open %s\n", in_fname);
-		return v;
+		free(v);
+		return NULL;
 	}
 	fclose(f);
-	v.img_data = imread(in_fname);
+	v->img_data = imread(in_fname);
+	if (v->img_data.data == NULL) {
+		free(v);
+		return NULL;
+	}
 
 	// Make it grayscale
 	Mat gray;
-	cvtColor(v.img_data, gray, CV_BGR2GRAY);
+	cvtColor(v->img_data, gray, CV_BGR2GRAY);
 	blur(gray, gray, Size(3,3));
 
 	// Find contours
@@ -77,7 +82,7 @@ processedImagery_t processFile(const char *in_fname)
 	Canny(gray, canny_output, thresh, thresh*2, 3);
 	findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0,0));
 	
-	v.contours = contours;
+	v->contours = contours;
 	
 	/*
 	for (int i=0; i<contours.size(); i++) {
@@ -98,10 +103,10 @@ processedImagery_t processFile(const char *in_fname)
 		t.px_top = 20+i;
 		t.px_right = 30+i;
 		t.px_bottom = 40+i;
-		v.targets.push_back(t);
+		v->targets.push_back(t);
 	}
 #else
-	vector<Rectangle3d> rectangles = findRectanglesInImage(v.img_data);
+	vector<Rectangle3d> rectangles = findRectanglesInImage(v->img_data);
 	for (size_t i=0; i<rectangles.size(); i++) {
 		Rectangle3d r = rectangles[i];
 		Target t;
@@ -113,10 +118,10 @@ processedImagery_t processFile(const char *in_fname)
 		t.px_top = bounds[1];
 		t.px_right = bounds[2];
 		t.px_bottom = bounds[3];
-		v.targets.push_back(t);
+		v->targets.push_back(t);
 	}
 	//std::sort(v.targets.begin(), v.targets.end(), sortTargets);
-	printf("I have %i targets!\n", v.targets.size());
+	printf("I have %i targets!\n", v->targets.size());
 #endif
 
 	return v;
@@ -130,7 +135,12 @@ void *processingMain(void *arg)
 	// TODO: Multiple images.
 	while (1) {
 		pthread_mutex_lock(&td->image_file_lock);
-		if (td->processing_result.uid != td->collection_cfg.uid) {
+		if (!td->processing_result) {
+			pthread_mutex_unlock(&td->image_file_lock);
+			Sleep(100);
+			continue;
+		}
+		if (td->processing_result->uid != td->collection_cfg.uid) {
 			//printf("%i %i\n", td->processing_result.uid, td->collection_cfg.uid);
 			//printf("%i\n", td->processing_result.uid);
 			//Sleep(20);
@@ -141,13 +151,17 @@ void *processingMain(void *arg)
 
 			//printf("Processing file.\n");
 			//Sleep(50);
-			processedImagery_t processed_imagery = processFile("processing-tmp.jpg");
+			processedImagery_t *processed_imagery = processFile("processing-tmp.jpg");
 			//Sleep(50);
 
 			pthread_mutex_lock(&td->processed_data_lock);
-			processed_imagery.uid = td->collection_cfg.uid;
-			td->processing_result.uid = td->collection_cfg.uid;
-			memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
+			processed_imagery->uid = td->collection_cfg.uid;
+			td->processing_result->uid = td->collection_cfg.uid;
+			//memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
+			if (td->processing_result) {
+				free(td->processing_result);
+			}
+			td->processing_result = processed_imagery;
 			pthread_mutex_unlock(&td->processed_data_lock);
 			//printf("It's bloody well unlocked.\n");
 		} else {

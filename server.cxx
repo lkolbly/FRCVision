@@ -60,17 +60,18 @@ Client::Client(int fd, threadData_t *td)
 	m_fd = fd;
 	m_conn_stage = 0;
 	m_databuf_len = 0;
-	m_databuf = (unsigned char *)malloc(1);
+	//m_databuf = (unsigned char *)malloc(1);
+	m_databuf = new unsigned char[1];
 	m_update_pending = 0;
 }
 
 int Client::send_raw_packet(unsigned int packet_type, const unsigned char *buf, int buflen)
 {
 	unsigned int l = buflen;
-	union {
+	/*union {
 	   unsigned int i;
 	   char j[4];
-	} foo;
+	} foo;*/
 
 	l = htonl(l);
 	send(m_fd, (const char *)&l, 4, 0);
@@ -158,10 +159,13 @@ int Client::update(void)
 	if (m_update_pending) {
 		//printf("Stateless is pending.\n");
 		if (pthread_mutex_trylock(&m_td->processed_data_lock) == 0) {
+		
+			if (m_td->processing_result) {
 
 #if 0
 			cv::Mat M = m_td->processing_result->img_data;
-			unsigned char *outgoing = (unsigned char*)malloc(14+M.rows*M.cols);
+			//unsigned char *outgoing = (unsigned char*)malloc(14+M.rows*M.cols);
+			unsigned char *outgoing = new unsigned char[14+M.rows*M.cols];
 			outgoing[0] = 0; // Camera ID
 			long timestamp = 0;
 			memcpy(outgoing+1, &timestamp, 8);
@@ -183,8 +187,9 @@ int Client::update(void)
 #endif
 
 			unsigned int datalen = 0;
-			unsigned char *outgoing = (unsigned char *)malloc(1024);
-			unsigned char *contour_data;// = m_td->processing_result.render_contours(datalen);
+			//unsigned char *outgoing = (unsigned char *)malloc(1024);
+			unsigned char *outgoing = new unsigned char[1024];
+			//unsigned char *contour_data;// = m_td->processing_result.render_contours(datalen);
 			
 			// Generate the target subframe
 			if (m_data_requested | (1<<0)) {
@@ -196,7 +201,7 @@ int Client::update(void)
 				memcpy(outgoing+datalen, &ntargets, 2);
 				datalen += 2;
 				
-				for (int i=0; i<m_td->processing_result->targets.size(); i++) {
+				for (size_t i=0; i<m_td->processing_result->targets.size(); i++) {
 					Target t = m_td->processing_result->targets[i];
 					short azimuth = htons(t.azimuth * 10);
 					unsigned short elevation = htons(t.elevation * 10);
@@ -220,8 +225,9 @@ int Client::update(void)
 			//printf("Sending 4 bytes\n");
 			send_raw_packet(0x82000002, outgoing, datalen);
 			
-			free(outgoing);
-			
+			//free(outgoing);
+			delete outgoing;
+			}
 			pthread_mutex_unlock(&m_td->processed_data_lock);
 			m_update_pending = 0;
 		}
@@ -278,12 +284,12 @@ void *serverMain(void *arg)
 	threadData_t *td = (threadData_t*)arg;
 	std::vector<Client*> clients;
 
-    int sockfd, newsockfd, portno;
+    int sockfd, portno;
     int clilen;
 	// int socklen_
-    char buffer[256];
+    //char buffer[256];
     struct sockaddr_in serv_addr, cli_addr;
-    int n;
+    //int n;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     // if (sockfd < 0) 

@@ -23,7 +23,9 @@ int networkingDownloadImage(CURL *c)
 	}
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
 	int success = curl_easy_perform(c);
-	printf("Success was %i: %s\n", success, curl_easy_strerror((CURLcode)success));
+	if (success) {
+		printf("Success was %i: %s\n", success, curl_easy_strerror((CURLcode)success));
+	}
 	fclose(f);
 	//Sleep(1000);
 	return success;
@@ -35,7 +37,7 @@ void *networkMain(void *arg)
 	printf("Starting networking thread.\n");
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 
-	int last_downloaded = -1;
+	//int last_downloaded = -1;
 	
 	CURL *c = curl_easy_init();
 	//curl_easy_setopt(c, CURLOPT_URL, "http://pillow.rscheme.org/robotics.jpg");
@@ -62,7 +64,7 @@ void *networkMain(void *arg)
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		printf("DOWNLOADING IMAGE.\n");
+		//printf("DOWNLOADING IMAGE.\n");
 		//printf("Copying network-tmp.jpg to storage-tmp.jpg\n");
 		CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
 		//Sleep(50);

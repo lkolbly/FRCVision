@@ -106,7 +106,7 @@ void loadConfigFiles(threadData_t *td)
 	for (;;) {
 		char buf[1024];
 		int done = 0;
-		int len = (int)fread(buf, 1, 1024, f);
+		(int)fread(buf, 1, 1024, f);
 		if (feof(f)) {
 			done = 1;
 		}

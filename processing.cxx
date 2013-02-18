@@ -13,7 +13,7 @@ int processing_Debug_Counter = 0;
 
 unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 {
-	char *data = (char*)malloc(1024);
+	char *data = new char[1024];
 	data[0] = 0;
 	data[1] = 1;
 	int offset=4;
@@ -55,17 +55,18 @@ processedImagery_t *processFile(const char *in_fname)
 {
 	//printf("Processing image '%s'\n", in_fname);
 
-	processedImagery_t *v = (processedImagery_t*)malloc(sizeof(processedImagery_t));
+	//processedImagery_t *v = (processedImagery_t*)malloc(sizeof(processedImagery_t));
+	processedImagery_t *v = new processedImagery_t;
 	FILE *f = fopen(in_fname, "rb");
 	if (!f) {
 		printf("Could not open %s\n", in_fname);
-		free(v);
+		delete v;
 		return NULL;
 	}
 	fclose(f);
 	v->img_data = imread(in_fname);
 	if (v->img_data.data == NULL) {
-		free(v);
+		delete v;
 		return NULL;
 	}
 
@@ -136,9 +137,12 @@ void *processingMain(void *arg)
 	while (1) {
 		pthread_mutex_lock(&td->image_file_lock);
 		if (!td->processing_result) {
-			pthread_mutex_unlock(&td->image_file_lock);
+			/*pthread_mutex_unlock(&td->image_file_lock);
 			Sleep(100);
-			continue;
+			continue;*/
+			//td->processing_result = (processedImagery_t*)malloc(sizeof(processedImagery_t));
+			td->processing_result = new processedImagery_t;
+			td->processing_result->uid = td->collection_cfg.uid;
 		}
 		if (td->processing_result->uid != td->collection_cfg.uid) {
 			//printf("%i %i\n", td->processing_result.uid, td->collection_cfg.uid);
@@ -159,7 +163,7 @@ void *processingMain(void *arg)
 			td->processing_result->uid = td->collection_cfg.uid;
 			//memcpy(&td->processing_result, &processed_imagery, sizeof(processedImagery_t));
 			if (td->processing_result) {
-				free(td->processing_result);
+				delete td->processing_result;
 			}
 			td->processing_result = processed_imagery;
 			pthread_mutex_unlock(&td->processed_data_lock);

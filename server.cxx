@@ -11,17 +11,7 @@
 #include "semaphores.hxx"
 #include "processing.hxx"
 
-#if 0
-// compute sum of positive matrix elements
-// (assuming that M is double-precision matrix)
-double sum=0;
-for(int i = 0; i < M.rows; i++)
-{
-    const double* Mi = M.ptr<double>(i);
-    for(int j = 0; j < M.cols; j++)
-        sum += std::max(Mi[j], 0.);
-}
-#endif
+FILE *server_Log;
 
 class Client
 {
@@ -245,7 +235,7 @@ int Client::data_receivable(void)
 	char buf[1024];
 	int nbytes = recv(m_fd, buf, 1024, 0);
 	if (-1 == nbytes || 0 == nbytes) {
-		printf("They've disconnected from us!\n");
+		fprintf(server_Log, "Client %i has disconnected\n", m_fd);
 		return 1;
 	} else {
 #if 0
@@ -276,11 +266,21 @@ int Client::getFD(void)
 void serverError(const char *msg)
 {
     perror(msg);
+	fprintf(server_Log, "serverError was called with '%s'\n", msg);
     exit(1);
+}
+
+void serverCloseLogs(void)
+{
+	fclose(server_Log);
 }
 
 void *serverMain(void *arg)
 {
+	server_Log = fopen("server.log", "a");
+	atexit(serverCloseLogs);
+	fprintf(server_Log, "Starting log file...\n");
+
 	threadData_t *td = (threadData_t*)arg;
 	std::vector<Client*> clients;
 
@@ -304,6 +304,8 @@ void *serverMain(void *arg)
              // error("ERROR on binding");
 	bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     listen(sockfd,5);
+	
+	fprintf(server_Log, "Started server on %i.\n", sockfd);
 	
 	int enable_fastloop = 0;
 	while (1) {
@@ -329,14 +331,17 @@ void *serverMain(void *arg)
 		//printf("%i\n", rval);
 		if (rval == -1) {
 			perror("select");
-			printf("WSA: %i\n", WSAGetLastError());
+			int last_error = WSAGetLastError();
+			printf("WSA: %i\n", last_error);
+			fprintf(server_Log, "WSA had an issue: '%i'\n", last_error);
 			exit(0);
 		}
 
 		if (FD_ISSET(sockfd, &rfs)) {
 			// There's someone new wanting a connection!
 			int new_fd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
-			printf("There's a new connection %i!\n", new_fd);
+			//printf("There's a new connection %i!\n", new_fd);
+			fprintf(server_Log, "Received new connection %i\n", new_fd);
 			Client *c = new Client(new_fd, td);
 			clients.push_back(c);
 		}

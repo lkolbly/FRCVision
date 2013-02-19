@@ -39,7 +39,7 @@ private:
   Polygon m_p;
   cv::Vec2f m_corners[4];
   double m_dist[4];
-  cv::Vec2f m_coefs[4];
+  cv::Vec3f m_coefs[4];
   
   cv::Vec2f m_camera_FOV;
 
@@ -47,9 +47,9 @@ public:
   Rectangle3d(Polygon p);
   void solve(double w, double h, double fovx, double fovy,
 	     double known_w, double known_h);
-  cv::Vec2f coef_from_point(double x, double y, double w, double h,
+  cv::Vec3f coef_from_point(double x, double y, double w, double h,
 			double fovx, double fovy);
-  double find_squareness(cv::Vec2f *coefs, double *dist);
+  double find_squareness(cv::Vec3f *coefs, double *dist);
 
   std::vector<cv::Vec3f> get_points(double *dist);
   std::vector<cv::Vec3f> get_points(void);

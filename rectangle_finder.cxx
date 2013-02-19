@@ -261,16 +261,27 @@ Rectangle3d::Rectangle3d(Polygon p)
   }
 }
 
-Vec2f Rectangle3d::coef_from_point(double x, double y, double w, double h,
+Vec3f Rectangle3d::coef_from_point(double x, double y, double w, double h,
 				   double fovx, double fovy)
 {
-  Vec2f v;
-  v[0] = tan(DEG2RAD(x/w*fovx - fovx/2.0));
-  v[1] = tan(DEG2RAD(y/h*fovy - fovy/2.0));
-  //v[0] = tan(DEG2RAD(x/w*fovx));
-  //v[1] = tan(DEG2RAD(y/h*fovy));
-  //printf("%f,%f => %f,%f (in %f,%f from %f)\n", x,y, v[0], v[1], w,h, DEG2RAD(x/w*fovx - fovx/2.0));
-  return v;
+	Vec3f v;
+	v[0] = tan(DEG2RAD(x/w*fovx - fovx/2.0));
+	v[1] = tan(DEG2RAD(y/h*fovy - fovy/2.0));
+	//v[0] = tan(DEG2RAD(x/w*fovx));
+	//v[1] = tan(DEG2RAD(y/h*fovy));
+	//printf("%f,%f => %f,%f (in %f,%f from %f)\n", x,y, v[0], v[1], w,h, DEG2RAD(x/w*fovx - fovx/2.0));
+
+	// At some point, these shouldn't be hard-coded
+	double c_theta = 30.0;
+	double c_rho = 0.0;
+
+	double theta = DEG2RAD(c_theta + h * y / fovy);
+	double rho = DEG2RAD(c_rho + w * x / fovx);
+	v[0] = cos(rho) + cos(theta) - 1.0;
+	v[1] = sin(theta);
+	v[2] = sin(rho) + cos(theta) - 1.0;
+
+	return v;
 }
 
 Vec3f my_normalize(Vec3f v)
@@ -314,7 +325,7 @@ vector<Vec3f> Rectangle3d::get_points(double *dist)
     if (dist[i] < 0.0) dist[i] = 0.0;
     pnts[i][0] = m_coefs[i][0] * dist[i];
     pnts[i][1] = m_coefs[i][1] * dist[i];
-    pnts[i][2] = dist[i];
+    pnts[i][2] = m_coefs[i][2] * dist[i];
   }
   return pnts;
 }
@@ -324,7 +335,7 @@ vector<Vec3f> Rectangle3d::get_points(void)
   return get_points(m_dist);
 }
 
-double Rectangle3d::find_squareness(Vec2f *coefs, double *dist)
+double Rectangle3d::find_squareness(Vec3f *coefs, double *dist)
 {
   // Find the current trial points
   vector<Vec3f> pnts = get_points(dist);

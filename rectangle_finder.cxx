@@ -16,7 +16,7 @@ by changing "#if 1" to "#if 0" and back */
 #define RAD2DEG(x) ((x)*57.2957795)
 
 #define POLYGON_DEBUG 0
-#define ENABLE_DEBUG_IMAGES 1
+#define ENABLE_DEBUG_IMAGES 0
 
 using namespace cv;
 
@@ -358,7 +358,7 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	//Vec2f coefs[4];
 	for (int i=0; i<4; i++) {
 		m_coefs[i] = coef_from_point((double)m_corners[i][0], (double)m_corners[i][1], w, h, fovx, fovy);
-		printf("%i: %f,%f => coefs=%f,%f\n", i, m_corners[i][0], m_corners[i][1], m_coefs[i][0], m_coefs[i][1]);
+		//printf("%i: %f,%f => coefs=%f,%f\n", i, m_corners[i][0], m_corners[i][1], m_coefs[i][0], m_coefs[i][1]);
 	}
 
 	// Solve to figure out the distance along said lines to make the angles 90deg
@@ -419,8 +419,8 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	vector<Vec3f> pnts = get_points();
 	for (int i=0; i<4; i++) {
 		double d = dist3d(pnts[i], pnts[(i+1)%4]);
-		printf("Known=%f, est=%f, d=%f at pnt=%i\n", known_w, est_w, d, i);
-		printf("%f=>%f,%f,%f %f=>%f,%f,%f\n", m_dist[i], pnts[i][0],pnts[i][1],pnts[i][2], m_dist[(i+1)%4], pnts[(i+1)%4][0],pnts[(i+1)%4][1],pnts[(i+1)%4][2]);
+		//printf("Known=%f, est=%f, d=%f at pnt=%i\n", known_w, est_w, d, i);
+		//printf("%f=>%f,%f,%f %f=>%f,%f,%f\n", m_dist[i], pnts[i][0],pnts[i][1],pnts[i][2], m_dist[(i+1)%4], pnts[(i+1)%4][0],pnts[(i+1)%4][1],pnts[(i+1)%4][2]);
 		if (d > est_w) {
 			est_w = d;
 		}
@@ -554,9 +554,11 @@ int rectangle_Finder_Debug_Counter = 0;
 
 void outputPicture(const char *name, Mat img)
 {
+#if ENABLE_DEBUG_IMAGES
 	char buf[1024];
 	snprintf(buf, 1024, "debug/%s_%04i.jpg", name, rectangle_Finder_Debug_Counter);
 	imwrite(buf, img);
+#endif
 }
 
 double getReferenceAngle(Vec2f a, Vec2f b) {
@@ -923,7 +925,8 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		}
 		poly.fromCorners(corners);
 		Rectangle3d r(poly);
-		r.solve((double)src.size().width, (double)src.size().height, 75.75*0.47,48.72*0.47, 53,11.75);
+		//r.solve((double)src.size().width, (double)src.size().height, 75.75*0.47,48.72*0.47, 53,11.75);
+		r.solve((double)src.size().width, (double)src.size().height, 45.75,28.72, 53,11.75);
 
 		Vec4i b = r.get_image_bounds();
 

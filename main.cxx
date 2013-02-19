@@ -146,6 +146,7 @@ int main ( int argc, char **argv )
 	pthread_mutex_t new_Image_Mutex;
 	pthread_mutex_init(&new_Image_Mutex, NULL);
 	threadData_t td;
+	td.networking_is_dead = 0;
 	td.processing_result = NULL;
 	td.mutex = new_Image_Mutex;
 	td.var = 0;

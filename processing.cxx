@@ -157,6 +157,9 @@ void *processingMain(void *arg)
 			//printf("Processing file.\n");
 			//Sleep(50);
 			processedImagery_t *processed_imagery = processFile("processing-tmp.jpg");
+			if (!processed_imagery) {
+				continue;
+			}
 			//Sleep(50);
 
 			pthread_mutex_lock(&td->processed_data_lock);

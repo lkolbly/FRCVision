@@ -267,6 +267,8 @@ Vec2f Rectangle3d::coef_from_point(double x, double y, double w, double h,
   Vec2f v;
   v[0] = tan(DEG2RAD(x/w*fovx - fovx/2.0));
   v[1] = tan(DEG2RAD(y/h*fovy - fovy/2.0));
+  //v[0] = tan(DEG2RAD(x/w*fovx));
+  //v[1] = tan(DEG2RAD(y/h*fovy));
   //printf("%f,%f => %f,%f (in %f,%f from %f)\n", x,y, v[0], v[1], w,h, DEG2RAD(x/w*fovx - fovx/2.0));
   return v;
 }
@@ -353,9 +355,10 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	double k = 0.01; // This is used in the iterative solver.
 
 	// Find the four lines that extend to the corners from the camera
-	Vec2f coefs[4];
+	//Vec2f coefs[4];
 	for (int i=0; i<4; i++) {
 		m_coefs[i] = coef_from_point((double)m_corners[i][0], (double)m_corners[i][1], w, h, fovx, fovy);
+		printf("%i: %f,%f => coefs=%f,%f\n", i, m_corners[i][0], m_corners[i][1], m_coefs[i][0], m_coefs[i][1]);
 	}
 
 	// Solve to figure out the distance along said lines to make the angles 90deg
@@ -365,11 +368,11 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	dist[1] = dist[2] = dist[3] = 1.0;
 	double last_inaccuracy = 0.0;
 	while (1) {
-		double sum = find_squareness(coefs, dist);
+		double sum = find_squareness(m_coefs, dist);
 		//printf("Inaccuracy: %f (k=%f)\n", sum, k);
-		if (last_inaccuracy-sum < 0.001) {
+		/*if (last_inaccuracy-sum < 0.001) {
 			break;
-		}
+		}*/
 		if (k < 0.000001) {
 			break;
 		}
@@ -379,9 +382,9 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 		for (int i=0; i<4; i++) {
 			double orig = dist[i];
 			dist[i] = orig + k;
-			double incr = find_squareness(coefs, dist);
+			double incr = find_squareness(m_coefs, dist);
 			dist[i] = orig - k;
-			double decr = find_squareness(coefs, dist);
+			double decr = find_squareness(m_coefs, dist);
 			dist[i] = orig;
 			if (sum-incr>sum-decr && incr<sum) {
 				dist[i] += k;
@@ -411,10 +414,13 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	// Now we can scale everyone to match the width to the known width
 	// We'll assume the 'width' is the 'longest' edge.
 	// Find the longest edge
+	scale_distances:;
 	double est_w = 0.0;
 	vector<Vec3f> pnts = get_points();
 	for (int i=0; i<4; i++) {
-		double d = dist3d(pnts[i], pnts[(i+1)%3]);
+		double d = dist3d(pnts[i], pnts[(i+1)%4]);
+		printf("Known=%f, est=%f, d=%f at pnt=%i\n", known_w, est_w, d, i);
+		printf("%f=>%f,%f,%f %f=>%f,%f,%f\n", m_dist[i], pnts[i][0],pnts[i][1],pnts[i][2], m_dist[(i+1)%4], pnts[(i+1)%4][0],pnts[(i+1)%4][1],pnts[(i+1)%4][2]);
 		if (d > est_w) {
 			est_w = d;
 		}
@@ -424,6 +430,9 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	double factor = known_w / est_w;
 	for (int i=0; i<4; i++) {
 		m_dist[i] *= factor;
+	}
+	if (est_w/known_w > 1.5 || known_w/est_w > 1.5) {
+		goto scale_distances;
 	}
 
 	// Some debugging info
@@ -530,8 +539,10 @@ double Rectangle3d::offcenter_angle(void)
 	Vec2f n(n3[0],n3[1]);
 	//printf("Hello?\n");
 	n = my_normalize(n);
+	tr = my_normalize(tr);
 	double dp = tr[0]*n[0] + tr[1]*n[1];
-	return acos(dp);
+	//printf("dp=%f\n", dp);
+	return 90.0 - RAD2DEG(acos(dp)) / 2.0;
 }
 
 Vec4i Rectangle3d::get_image_bounds(void)
@@ -912,7 +923,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		}
 		poly.fromCorners(corners);
 		Rectangle3d r(poly);
-		r.solve((double)src.size().width, (double)src.size().height, 60.0,60.0, 7.0,2.75);
+		r.solve((double)src.size().width, (double)src.size().height, 75.75*0.47,48.72*0.47, 53,11.75);
 
 		Vec4i b = r.get_image_bounds();
 

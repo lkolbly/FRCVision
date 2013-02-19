@@ -11,6 +11,8 @@ using namespace cv;
 
 int processing_Debug_Counter = 0;
 
+#define USE_DUMMY_TARGET_DATA 0
+
 unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 {
 	char *data = new char[1024];
@@ -38,8 +40,6 @@ unsigned char *processedImagery_t::render_contours(unsigned int &len_out)
 	
 	return (unsigned char *)data;
 }
-
-#define USE_DUMMY_TARGET_DATA 0
 
 bool sortTargets(Target a, Target b)
 {
@@ -69,30 +69,6 @@ processedImagery_t *processFile(const char *in_fname)
 		delete v;
 		return NULL;
 	}
-
-	// Make it grayscale
-	Mat gray;
-	cvtColor(v->img_data, gray, CV_BGR2GRAY);
-	blur(gray, gray, Size(3,3));
-
-	// Find contours
-	Mat canny_output;
-	vector<vector<Point> > contours;
-	vector<Vec4i> hierarchy;
-	int thresh = 100;
-	Canny(gray, canny_output, thresh, thresh*2, 3);
-	findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0,0));
-	
-	v->contours = contours;
-	
-	/*
-	for (int i=0; i<contours.size(); i++) {
-		printf("%i: %i has %i points\n", i, hierarchy[i][0], contours[i].size());
-		for (int j=0; j<contours[i].size(); j++) {
-			printf(" - %i/%i: %i %i\n", i,j, contours[i][j].x, contours[i][j].y);
-		}
-	}
-	*/
 	
 #if USE_DUMMY_TARGET_DATA
 	for (int i=0; i<4; i++) {
@@ -138,20 +114,11 @@ void *processingMain(void *arg)
 	while (1) {
 		pthread_mutex_lock(&td->image_file_lock);
 		if (!td->processing_result) {
-			/*pthread_mutex_unlock(&td->image_file_lock);
-			Sleep(100);
-			continue;*/
-			//td->processing_result = (processedImagery_t*)malloc(sizeof(processedImagery_t));
 			td->processing_result = new processedImagery_t;
 			td->processing_result->uid = td->collection_cfg.uid;
 		}
 		if (td->processing_result->uid != td->collection_cfg.uid) {
-			//printf("%i %i\n", td->processing_result.uid, td->collection_cfg.uid);
-			//printf("%i\n", td->processing_result.uid);
-			//Sleep(20);
 			CopyFile("storage-tmp.jpg", "processing-tmp.jpg", false); // Copy out the file
-			//printf("Moved file to processing-tmp.jpg\n");
-			//td->has_processed_image = 1;
 			pthread_mutex_unlock(&td->image_file_lock);
 
 			//printf("Processing file.\n");

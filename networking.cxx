@@ -125,23 +125,10 @@ size_t write_func(void *buffer, size_t size, size_t nmemb, void *userp)
 
 int networkingDownloadImage(CURL *c)
 {
-	//printf("Downloading file.\n");
-#if 0
-	FILE *f = fopen("network-tmp.jpg", "wb");
-	if (!f) {
-		fprintf(stderr, "We couldn't open tmp.jpg...\n");
-		return -1;
-	}
-	curl_easy_setopt(c, CURLOPT_WRITEDATA, &f);
-#endif
 	int success = curl_easy_perform(c);
 	if (success) {
 		fprintf(network_Log_File, "Success was %i: %s\n", success, curl_easy_strerror((CURLcode)success));
 	}
-#if 0
-	fclose(f);
-#endif
-	//Sleep(1000);
 	return success;
 }
 
@@ -189,22 +176,10 @@ void *networkMain(void *arg)
 
 		// Move 'tmp.jpg' to the protected 'out.jpg'
 		pthread_mutex_lock(&td->image_file_lock);
-		//printf("DOWNLOADING IMAGE.\n");
-		//printf("Copying network-tmp.jpg to storage-tmp.jpg\n");
-		//CopyFile("network-tmp.jpg", "storage-tmp.jpg", false);
 		FILE *f = fopen("storage-tmp.jpg", "wb");
-#if 0
-		for (int i=0; i<16; i++) {
-			printf("0x%X ", network_Tmp_File.data[i]);
-		}
-		printf("\n");
-#endif
 		int nbytes = fwrite(network_Tmp_File.data, 1, network_Tmp_File.data_len, f);
-		//printf("Wrote out %i bytes.\n", nbytes);
 		limiter.add_transaction(nbytes);
 		fclose(f);
-		//exit(0);
-		//Sleep(50);
 		td->has_processed_image = 0;
 		td->collection_cfg.uid = rand();
 		pthread_mutex_unlock(&td->image_file_lock);

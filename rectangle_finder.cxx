@@ -2,6 +2,7 @@
 of the program.  Switch between standard and probabilistic Hough transform
 by changing "#if 1" to "#if 0" and back */
 // all angles are stored in degrees
+#include "rectangle_finder.hxx"
 #include <opencv/cv.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <math.h>
@@ -10,7 +11,7 @@ by changing "#if 1" to "#if 0" and back */
 #include <stdio.h>
 #include <vector>
 #include <algorithm>
-#include "rectangle_finder.hxx"
+#include <windows.h>
 
 #define DEG2RAD(x) ((x)/57.2957795)
 #define RAD2DEG(x) ((x)*57.2957795)
@@ -18,7 +19,126 @@ by changing "#if 1" to "#if 0" and back */
 #define POLYGON_DEBUG 0
 #define ENABLE_DEBUG_IMAGES 0
 
+using namespace std;
 using namespace cv;
+
+class ProfilerSection
+{
+private:
+	char *m_name;
+	bool m_is_activated;
+	int m_activate_time;
+	int m_n_calls;
+	
+	double m_avg_time;
+	int m_tot_time;
+
+public:
+	ProfilerSection(const char *name);
+	const char *name(void);
+	void activate(void);
+	void deactivate(void);
+	void print(FILE *f);
+};
+
+ProfilerSection::ProfilerSection(const char *name)
+{
+	m_name = strdup(name);
+	m_is_activated = false;
+	m_activate_time = 0;
+	m_n_calls = 0;
+	m_tot_time = 0;
+	m_avg_time = 0.0;
+}
+
+void ProfilerSection::activate(void)
+{
+	if (m_is_activated) return; // This shouldn't happen...
+	m_is_activated = true;
+	m_activate_time = GetTickCount();
+}
+
+void ProfilerSection::deactivate(void)
+{
+	m_is_activated = false;
+	m_tot_time += GetTickCount() - m_activate_time;
+	m_n_calls += 1;
+}
+
+const char *ProfilerSection::name(void)
+{
+	return m_name;
+}
+
+void ProfilerSection::print(FILE *f)
+{
+	fprintf(f, "%s: Total time %ims in %i calls, avg=%f\n", m_name, m_tot_time, m_n_calls, (double)m_tot_time/(double)m_n_calls);
+}
+
+// This guy does profiling, since gprof is stupid...
+class Profiler
+{
+private:
+	vector<ProfilerSection*> m_sections;
+
+public:
+	Profiler();
+	~Profiler();
+	ProfilerSection *getSection(const char *name);
+	void startSection(const char *name);
+	void endSection(const char *name);
+	void print(void);
+};
+
+Profiler::Profiler()
+{
+}
+
+Profiler::~Profiler()
+{
+	for (size_t i=0; i<m_sections.size(); i++) {
+		free(m_sections[i]);
+	}
+}
+
+ProfilerSection *Profiler::getSection(const char *name)
+{
+	for (size_t i=0; i<m_sections.size(); i++) {
+		if (strcmp(m_sections[i]->name(), name) == 0) {
+			return m_sections[i];
+		}
+	}
+	return NULL;
+}
+
+void Profiler::startSection(const char *name)
+{
+	ProfilerSection *s = getSection(name);
+	if (!s) {
+		s = new ProfilerSection(name);
+		m_sections.push_back(s);
+	}
+
+	s->activate();
+}
+
+void Profiler::endSection(const char *name)
+{
+	ProfilerSection *s = getSection(name);
+	s->deactivate();
+}
+
+void Profiler::print(void)
+{
+	printf("Writing out the profiler information...\n");
+	FILE *f = fopen("profiler.log", "w");
+	for (size_t i=0; i<m_sections.size(); i++) {
+		m_sections[i]->print(f);
+	}
+	fclose(f);
+}
+
+Profiler *finder_Profiler = NULL;
 
 double min(double a, double b)
 {
@@ -209,16 +329,16 @@ Vec4i Polygon::get_bounds(void)
 	return Vec4i(left, right, bottom, top);
 }
 
-vector<Polygon> detectRectangles(vector<Vec4i> lines)
+vector<class Polygon> detectRectangles(vector<Vec4i> lines)
 {
 	// We iterate through every line. For the beginning and ending points,
 	// we find nearby lines, and generate shapes that match.
 	// After discarding shapes that don't have 4 sides, we are left with
 	// only quadrangles.
-	vector<Polygon> rectangles;
+	vector<class Polygon> rectangles;
 	//printf("We're detecting rectangles in %lu lines.\n", lines.size());
 	for (size_t i=0; i<lines.size(); i++) {
-		Polygon p;
+		class Polygon p;
 		p.add_line(lines[i]);
 		for (size_t j=0; j<lines.size(); j++) {
 			if (!p.contains(lines[j])) {
@@ -234,7 +354,7 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
 	}
 
 	// Now collapse all of the rectangles
-	vector<Polygon> unique_rectangles;
+	vector<class Polygon> unique_rectangles;
 	for (size_t i=0; i<rectangles.size(); i++) {
 		double min_diff = 10000.0;
 		for (int j=i-1; j>=0; j--) {
@@ -252,7 +372,7 @@ vector<Polygon> detectRectangles(vector<Vec4i> lines)
 	return unique_rectangles;
 }
 
-Rectangle3d::Rectangle3d(Polygon p)
+Rectangle3d::Rectangle3d(class Polygon p)
 {
   m_p = p;
   for (int i=0; i<4; i++) {
@@ -368,12 +488,13 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 	dist[1] = dist[2] = dist[3] = 1.0;
 	double last_inaccuracy = 0.0;
 	while (1) {
+		finder_Profiler->startSection("edger_iteration");
 		double sum = find_squareness(m_coefs, dist);
 		//printf("Inaccuracy: %f (k=%f)\n", sum, k);
 		/*if (last_inaccuracy-sum < 0.001) {
 			break;
 		}*/
-		if (k < 0.000001) {
+		if (k < 0.0001) {
 			break;
 		}
 
@@ -404,7 +525,9 @@ void Rectangle3d::solve(double w, double h, double fovx, double fovy,
 		if (sum < 0.01) {
 			break;
 		}
+		finder_Profiler->endSection("edger_iteration");
 	}
+	finder_Profiler->endSection("edger_iteration");
 
 	// Copy out the distances.
 	for (int i=0; i<4; i++) {
@@ -625,9 +748,56 @@ Mat myHaughTransform(vector<Vec2f> hull, const char *img_name)
 	return img2;
 }
 
+void findRectanglesClearProfiler(void)
+{
+	finder_Profiler->print();
+}
+
+// Expands b to fit p. B is <left,bottom,right,top>
+Vec4f update_bounds(Vec2f p, Vec4f b)
+{
+	if (p[0] < b[0]) b[0] = p[0];
+	if (p[0] > b[2]) b[2] = p[0];
+	if (p[1] < b[1]) b[1] = p[1];
+	if (p[1] > b[3]) b[3] = p[1];
+	return b;
+}
+
+bool does_range_overlap(double min1, double max1, double min2, double max2)
+{
+	if (max1 > min2 && max2 > min1) return true;
+	if (max2 > min1 && max1 > min2) return true;
+	return false;
+}
+
+bool do_bounds_overlap(Vec4f b1, Vec4f b2)
+{
+	if (does_range_overlap(b1[0],b1[2], b2[0],b2[2]) && does_range_overlap(b1[1],b1[3], b2[1],b2[3])) {
+		return true;
+	}
+	return false;
+}
+
+bool is_point_within_bounds(Vec2f p, Vec4f b, double border)
+{
+	if (p[0]>b[0]-border && p[0]<b[2]+border && p[1]>b[1]-border && p[1]<b[3]+border) {
+		return true;
+	}
+	return false;
+}
+
 vector<Rectangle3d> findRectanglesInImage(Mat src)
 {
+	Profiler *prof = finder_Profiler;
+	if (!prof) {
+		prof = new Profiler();
+		finder_Profiler = prof;
+		atexit(findRectanglesClearProfiler);
+	}
+	prof->startSection("main");
+
 	rectangle_Finder_Debug_Counter++;
+	
     Mat dst, color_dst;
 	
 	cvtColor(src, src, CV_BGR2GRAY);
@@ -668,6 +838,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	canny_output.convertTo(canny_output, CV_16UC1);
 	
 	// Take the canny, make up a bunch of points on it, and then call it a point cloud.
+	prof->startSection("canny_to_point_cloud");
 	vector<Vec2f> canny_based_point_cloud;
 	for (int i=0; i<canny_output.size().width; i++) {
 		for (int j=0; j<canny_output.size().height; j++) {
@@ -677,6 +848,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		}
 	}
 	kps2 = canny_based_point_cloud;
+	prof->endSection("canny_to_point_cloud");
 
 #if ENABLE_DEBUG_IMAGES
 	printf("I found %u points from the canny.\n", kps2.size());
@@ -701,14 +873,21 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 	Mat corner_mask = harris_output == dilated_corners;
 	outputPicture("corner", corner_mask);
 #endif
-	
-	// Get rid of all blobs that are far away
+
+	// Create initial point clouds based on the points
+	prof->startSection("initial_point_clouds");
 	int POINT_CLOUD_MIN_DIST = 5; // Distance which makes two point clouds the same
 	vector<vector<Vec2f> > point_clouds;
+	vector<Vec4f> pc_bounds;
 	for (size_t i=0; i<kps2.size(); i++) {
 		bool did_add = false;
 		// We're deciding which point cloud to add kps2[i] to
 		for (size_t j=0; j<point_clouds.size(); j++) {
+			// Check to see if we're within the point cloud's bounds. If so, we have to do the expensive point-by-point calculation.
+			if (!is_point_within_bounds(kps2[i], pc_bounds[j], POINT_CLOUD_MIN_DIST)) {
+				continue;
+			}
+
 			// Find the nearest one in the point cloud
 			double min_dist = 10000.0;
 			for (size_t k=0; k<point_clouds[j].size(); k++) {
@@ -724,6 +903,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			if (min_dist < POINT_CLOUD_MIN_DIST) {
 				// Add it
 				point_clouds[j].push_back(kps2[i]);
+				pc_bounds[j] = update_bounds(kps2[i], pc_bounds[j]);
 				did_add = true;
 				break;
 			}
@@ -734,12 +914,49 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			vector<Vec2f> cloud;
 			cloud.push_back(kps2[i]);
 			point_clouds.push_back(cloud);
+			pc_bounds.push_back(Vec4f(kps2[i][0], kps2[i][0], kps2[i][1], kps2[i][1]));
 		}
 	}
+	prof->endSection("initial_point_clouds");
+
+	// Find the first-order approximations for each cloud
+#if 0
+	prof->startSection("calc_point_cloud_approximations");
+	vector<Vec4f> pc_bounds;
+	for (size_t i=0; i<point_clouds.size(); i++) {
+		pc_bounds.push_back(Vec4f(0.0,0.0,0.0,0.0));
+
+		for (size_t j=0; j<point_clouds[i].size(); j++) {
+			pc_bounds[i] = update_bounds(point_clouds[i][j], pc_bounds[i]);
+		}
+
+		// Expand the bounds a little bit
+		pc_bounds[i][0] -= POINT_CLOUD_MIN_DIST;
+		pc_bounds[i][1] += POINT_CLOUD_MIN_DIST;
+		pc_bounds[i][2] -= POINT_CLOUD_MIN_DIST;
+		pc_bounds[i][3] += POINT_CLOUD_MIN_DIST;
+
+#if 0
+		pc_centroids[i][0] = 0.0;
+		pc_centroids[i][1] = 0.0;
+		for (size_t j=0; j<point_clouds[i].size(); j++) {
+			pc_centroids[i][0] += point_clouds[i][j][0];
+			pc_centroids[i][1] += point_clours[i][j][1];
+		}
+		pc_centroids[i][0] /= (double)point_clouds[i].size();
+		pc_centroids[i][1] /= (double)point_clouds[i].size();
+
+		// Now find the max radius to 
+#endif
+	}
+	prof->endSection("calc_point_cloud_approximations");
+#endif
 
 	// Merge nearby point clouds
+	prof->startSection("merge_point_clouds");
 	//printf("Number of point clouds: %i\n", point_clouds.size());
 	vector<vector<Vec2f> > new_point_clouds;
+	set<int> merged_clouds;
 	for (size_t i=0; i<point_clouds.size(); i++) {
 		vector<Vec2f> cloud;
 		bool did_merge_down = false;
@@ -751,6 +968,18 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			if (i == j) {
 				continue;
 			}
+
+			// Check the bounds, before we do the expensive operation.
+			if (!do_bounds_overlap(pc_bounds[i], pc_bounds[j])) {
+				continue;
+			}
+
+			// If we've already merged this cloud, let's skip it
+			if (merged_clouds.count(j) > 0) {
+				continue;
+			}
+
+			// Do the expensive checking point-by-point.
 			double min_dist = 10000.0;
 			for (size_t k=0; k<point_clouds[i].size(); k++) {
 				for (size_t m=0; m<point_clouds[j].size(); m++) {
@@ -772,6 +1001,8 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 					cloud.push_back(point_clouds[j][k]);
 				}
 				
+				// Mark that we've merged cloud j to somewhere
+				merged_clouds.insert(j);
 				if (j < i) {
 					did_merge_down = true;
 				}
@@ -781,8 +1012,10 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			new_point_clouds.push_back(cloud);
 		}
 	}
+	prof->endSection("merge_point_clouds");
 
 	// Convex hull this sucker
+	prof->startSection("convex_hulling");
 	point_clouds = new_point_clouds;
 	vector<vector<Vec2f> > hulls;
 	//printf("There are %i (%i) point clouds.\n", point_clouds.size(), new_point_clouds.size());
@@ -797,6 +1030,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 			hulls.push_back(hull);
 		}
 	}
+	prof->endSection("convex_hulling");
 
 #if 0
 	// Find the four corners for each hull
@@ -850,6 +1084,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 #endif
 
 	// Find the rectangle edges for each hull...
+	prof->startSection("edging");
 	vector<Rectangle3d> new_rects_3d;
 	for (size_t i=0; i<hulls.size(); i++) {
 		if (hulls[i].size() < 4) {
@@ -918,7 +1153,7 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		if (!is_valid_rect) continue; // Onto the next point cloud!
 		
 		// Pass them into the Rectangle3D framework
-		Polygon poly;
+		class Polygon poly;
 		vector<Vec2i> corners;
 		for (size_t j=0; j<4; j++) {
 			corners.push_back(Vec2i(hulls[i][closest_indices[j]][0],hulls[i][closest_indices[j]][1]));
@@ -955,6 +1190,9 @@ vector<Rectangle3d> findRectanglesInImage(Mat src)
 		}
 		outputPicture(bufname, pc_img);
 	}
+	prof->endSection("edging");
 	outputPicture("newalg", src2);
+	prof->endSection("main");
+	//prof->print();
 	return new_rects_3d;
 }

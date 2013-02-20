@@ -3,6 +3,15 @@
 import socket, struct, time
 import urllib2
 
+print """
+Expect something similar to:
+=============================================
+Got 2 targets.
+0 (5, 265, 2436, 242, 231, 417, 316)
+1 (5, 297, 2824, 253, 243, 404, 296)
+=============================================
+"""
+
 def getData(s, nbytes):
         data = ""
         while len(data) < nbytes:
@@ -11,7 +20,7 @@ def getData(s, nbytes):
 
 # First, open the socket.
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(("localhost", 4180))
+sock.connect(("127.0.0.1", 4180))
 
 sock.send(struct.pack("!III", 4, 1, 1)) # Handshake
 
@@ -42,9 +51,9 @@ def getResponse():
                 f.write("tgt %i, %s\n"%(i, values))
                 f.close()
 
-        f = urllib2.urlopen("http://localhost:8006/")
-        open("unittest/test-case-%i.jpg"%cnt, "wb").write(f.read())
-        f.close()
+        #f = urllib2.urlopen("http://localhost:8006/")
+        #open("unittest/test-case-%i.jpg"%cnt, "wb").write(f.read())
+        #f.close()
 
 while 1:
         getResponse()

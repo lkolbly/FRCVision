@@ -27,7 +27,7 @@ public:
   cv::Vec4i get_bounds(void);
 
   // Find the RMS difference from another polygon
-  double difference(Polygon *other);
+  double difference(class Polygon *other);
 
   int should_add_line(cv::Vec4i line);
 

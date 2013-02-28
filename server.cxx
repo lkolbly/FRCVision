@@ -307,6 +307,13 @@ void *serverMain(void *arg)
 	
 	int enable_fastloop = 0;
 	while (1) {
+		pthread_mutex_lock(&td->network_heartbeat_mutex);
+		if (td->time_to_die) {
+			pthread_mutex_unlock(&td->network_heartbeat_mutex);
+			break;
+		}
+		pthread_mutex_unlock(&td->network_heartbeat_mutex);
+
 		fd_set rfs;
 		FD_ZERO(&rfs);
 		FD_SET(sockfd, &rfs);
@@ -369,6 +376,11 @@ void *serverMain(void *arg)
 			}
 		}
 	}
+	
+	for (std::vector<Client*>::iterator it=clients.begin(); it!=clients.end(); ++it) {
+		close((*it)->getFD());
+	}
+	close(sockfd);
 
     return 0;
 }

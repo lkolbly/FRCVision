@@ -54,6 +54,8 @@ void *killServerMain(void *p)
 			pthread_mutex_lock(&arg->mutex);
 			arg->needs_death = 1;
 			pthread_mutex_unlock(&arg->mutex);
+			close(new_fd);
+			close(sockfd);
 			return (void*)1;
 
 			// Check to see if they have the right MD5sum

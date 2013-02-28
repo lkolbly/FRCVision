@@ -168,6 +168,13 @@ void *networkMain(void *arg)
 	// TODO: Some sort of flow rate.
 	// TODO: Multiple cameras.
 	while (1) {
+		pthread_mutex_lock(&td->network_heartbeat_mutex);
+		if (td->time_to_die) {
+			pthread_mutex_unlock(&td->network_heartbeat_mutex);
+			break;
+		}
+		pthread_mutex_unlock(&td->network_heartbeat_mutex);
+
 		limiter.delay(); // Delay the transaction until we're safe
 		if (networkingDownloadImage(c)) {
 			fprintf(stderr, "An error has occurred while attempting to access the HTTP camera at '%s'\n", camera_url);

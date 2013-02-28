@@ -151,6 +151,7 @@ int main ( int argc, char **argv )
 	td.networking_is_dead = 0;
 	td.processing_result = NULL;
 	td.mutex = new_Image_Mutex;
+	td.time_to_die = 0;
 	td.var = 0;
 	if (loadConfigFiles(&td)) {
 		fprintf(log, "There was an issue reading the config file.\n");
@@ -195,11 +196,19 @@ int main ( int argc, char **argv )
 		// Check the killserver thread
 		pthread_mutex_lock(&ks_td.mutex);
 		if (ks_td.needs_death) {
+			// Set the kill flag
+			pthread_mutex_lock(&td.network_heartbeat_mutex);
+			td.time_to_die = 1;
+			pthread_mutex_unlock(&td.network_heartbeat_mutex);
+		
 			fprintf(log, "Sombody connected to the death port.\n");
 			fclose(log);
-			pthread_cancel(networking_thread);
-			pthread_cancel(processing_thread);
-			pthread_cancel(server_thread);
+			pthread_join(networking_thread, NULL);
+			pthread_join(processing_thread, NULL);
+			pthread_join(server_thread, NULL);
+			//pthread_cancel(networking_thread);
+			//pthread_cancel(processing_thread);
+			//pthread_cancel(server_thread);
 			return 2;
 		}
 		pthread_mutex_unlock(&ks_td.mutex);

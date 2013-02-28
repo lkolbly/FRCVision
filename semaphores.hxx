@@ -35,6 +35,7 @@ typedef struct threadData_t {
 	// The networking heartbeat
 	pthread_mutex_t network_heartbeat_mutex;
 	int networking_is_dead;
+	int time_to_die;
 } threadData_t;
 
 #endif

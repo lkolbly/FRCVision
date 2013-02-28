@@ -112,6 +112,13 @@ void *processingMain(void *arg)
 
 	// TODO: Multiple images.
 	while (1) {
+		pthread_mutex_lock(&td->network_heartbeat_mutex);
+		if (td->time_to_die) {
+			pthread_mutex_unlock(&td->network_heartbeat_mutex);
+			break;
+		}
+		pthread_mutex_unlock(&td->network_heartbeat_mutex);
+
 		pthread_mutex_lock(&td->image_file_lock);
 		if (!td->processing_result) {
 			td->processing_result = new processedImagery_t;

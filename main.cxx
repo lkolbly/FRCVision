@@ -124,6 +124,8 @@ int loadConfigFiles(threadData_t *td)
 
 int main ( int argc, char **argv )
 {
+	printf("Compiled at %s %s\n", __DATE__, __TIME__);
+
 	FILE *log = fopen("main.log", "w");
 
     WORD wVersionRequested;
@@ -195,6 +197,9 @@ int main ( int argc, char **argv )
 		if (ks_td.needs_death) {
 			fprintf(log, "Sombody connected to the death port.\n");
 			fclose(log);
+			pthread_cancel(networking_thread);
+			pthread_cancel(processing_thread);
+			pthread_cancel(server_thread);
 			return 2;
 		}
 		pthread_mutex_unlock(&ks_td.mutex);

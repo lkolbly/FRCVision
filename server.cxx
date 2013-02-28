@@ -285,17 +285,17 @@ void *serverMain(void *arg)
 	std::vector<Client*> clients;
 
     int sockfd, portno;
-    int clilen;
 	// int socklen_
     //char buffer[256];
     struct sockaddr_in serv_addr, cli_addr;
+    int clilen = sizeof(cli_addr);
     //int n;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     // if (sockfd < 0) 
        // error("ERROR opening socket");
     // bzero((char *) &serv_addr, sizeof(serv_addr));
-    portno = 4180;
+    portno = 41800;
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(portno);
@@ -336,9 +336,14 @@ void *serverMain(void *arg)
 		if (FD_ISSET(sockfd, &rfs)) {
 			// There's someone new wanting a connection!
 			int new_fd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
-			printf("There's a new connection %i!\n", new_fd);
-			Client *c = new Client(new_fd, td);
-			clients.push_back(c);
+			if (new_fd >= 0) {
+				printf("There's a new connection %i!\n", new_fd);
+				Client *c = new Client(new_fd, td);
+				clients.push_back(c);
+			} else {
+				printf("WTF? new_fd = %i!\n", new_fd);
+				printf("WSA Error was %i\n", WSAGetLastError());
+			}
 		}
 
 		for (std::vector<Client*>::iterator it=clients.begin(); it!=clients.end(); ++it) {

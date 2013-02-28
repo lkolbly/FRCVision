@@ -15,10 +15,10 @@ void *killServerMain(void *p)
 	killServerArg_t *arg = (killServerArg_t*)p;
 
     int sockfd, portno;
-    int clilen;
 	// int socklen_
     //char buffer[256];
     struct sockaddr_in serv_addr, cli_addr;
+    int clilen = sizeof(cli_addr);
 	
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     portno = 4181;
@@ -51,6 +51,10 @@ void *killServerMain(void *p)
 			// There's someone new wanting a connection!
 			int new_fd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
 			printf("There's a new connection %i!\n", new_fd);
+			pthread_mutex_lock(&arg->mutex);
+			arg->needs_death = 1;
+			pthread_mutex_unlock(&arg->mutex);
+			return (void*)1;
 
 			// Check to see if they have the right MD5sum
 			char buf[arg->secret_len];
